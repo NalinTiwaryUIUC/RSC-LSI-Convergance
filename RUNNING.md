@@ -94,7 +94,7 @@ Optional: install a specific PyTorch build for your CUDA version (see [pytorch.o
 
 Submit one job per (width, h, chain). Each job runs a single chain and writes its own run dir.
 
-A ready-to-use SLURM script is in `scripts/submit_chain.sh` (mail, logs, GPU, account/partition set for Illinois cluster). It accepts `WIDTH H CHAIN N_TRAIN` as arguments.
+A ready-to-use SLURM script is in `scripts/submit_chain.sh` (mail, logs, GPU, account/partition set for Illinois cluster). **Submit from the project directory**: `cd /path/to/RSC_Conv`, run `mkdir -p logs/lsi_ula` once, then `sbatch scripts/submit_chain.sh`. It accepts `WIDTH H CHAIN N_TRAIN` as arguments.
 
 Submit:
 

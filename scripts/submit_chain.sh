@@ -13,7 +13,8 @@
 #SBATCH --output=logs/lsi_ula/lsi_ula_%j.out
 #SBATCH --error=logs/lsi_ula/lsi_ula_%j.err
 
-# Run one ULA chain. Arguments: WIDTH  H  CHAIN  N_TRAIN
+# Run one ULA chain. IMPORTANT: Submit from the project directory (cd /path/to/RSC_Conv first).
+# Arguments: WIDTH  H  CHAIN  N_TRAIN
 #   CHAIN = 0, 1, 2, or 3 (four chains per width/h)
 # Examples:
 #   sbatch scripts/submit_chain.sh              # defaults: width=1, h=1e-5, chain=0, n_train=1024
@@ -27,15 +28,18 @@ H=${2:-1e-5}
 CHAIN=${3:-0}      # 0, 1, 2, or 3
 N_TRAIN=${4:-1024}
 
-# Project root (change if you submit from elsewhere)
+# Project root: use SLURM submission dir (you must run sbatch from the project directory)
+# Override with RSC_CONV_DIR if submitting from elsewhere
 if [ -n "$RSC_CONV_DIR" ]; then
     PROJ_DIR="$RSC_CONV_DIR"
+elif [ -n "$SLURM_SUBMIT_DIR" ]; then
+    PROJ_DIR="$SLURM_SUBMIT_DIR"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 cd "$PROJ_DIR" || { echo "Failed to cd to $PROJ_DIR"; exit 1; }
-
+# Ensure logs dir exists (output/error paths are relative to submission dir)
 mkdir -p logs/lsi_ula
 
 echo "=== Job started at $(date) ==="
