@@ -94,38 +94,19 @@ Optional: install a specific PyTorch build for your CUDA version (see [pytorch.o
 
 Submit one job per (width, h, chain). Each job runs a single chain and writes its own run dir.
 
-Example SLURM script `submit_chain.sh`:
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=lsi_ula
-#SBATCH --time=48:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:1
-
-WIDTH=${1:-1}
-H=${2:-1e-5}
-CHAIN=${3:-0}
-N_TRAIN=${4:-1024}
-
-cd /path/to/RSC_Conv
-source venv/bin/activate
-python3 scripts/run_single_chain.py --width $WIDTH --h $H --chain $CHAIN --n_train $N_TRAIN \
-  --data_dir experiments/data --runs_dir experiments/runs --root ./data
-```
+A ready-to-use SLURM script is in `scripts/submit_chain.sh` (mail, logs, GPU, account/partition set for Illinois cluster). It accepts `WIDTH H CHAIN N_TRAIN` as arguments.
 
 Submit:
 
 ```bash
 for w in 0.5 1 2 4; do
   for c in 0 1 2 3; do
-    sbatch submit_chain.sh $w 1e-5 $c 1024
+    sbatch scripts/submit_chain.sh $w 1e-5 $c 1024
   done
 done
 ```
 
-Adjust `--time`, `--mem`, `--root`, and paths to your cluster.
+Adjust SBATCH options in `scripts/submit_chain.sh` (time, mem, account, partition) for your cluster. Set `RSC_CONV_DIR` if you submit from a different directory.
 
 ### 5. After jobs finish
 
