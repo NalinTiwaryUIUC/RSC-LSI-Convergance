@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE / editor
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CIFAR-10 download (when using --root ./data; keep data/*.py package)
+data/cifar-10-batches-py/
+data/*.tar.gz
+data/*.zip
+
+# Keep all experiment results for cumulative metrics (do not ignore):
+#   experiments/runs/     -> run_config.yaml, iter_metrics.jsonl, samples_metrics.npz
+#   experiments/summaries/ -> *.csv
+#   experiments/figures/   -> *.png
+#   experiments/data/      -> indices and projection .pt/.json (small, reproducible)
