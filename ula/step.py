@@ -19,6 +19,7 @@ def ula_step(
     alpha: float,
     h: float,
     device: torch.device,
+    noise_scale: float = 1.0,
     return_U: bool = False,
     generator: torch.Generator | None = None,
 ) -> dict[str, Any]:
@@ -29,7 +30,8 @@ def ula_step(
     U.backward()
 
     grads = torch.cat([p.grad.view(-1) for p in model.parameters()])
-    theta_new = theta_prev - h * grads + (2.0 * h) ** 0.5 * torch.randn(
+    noise_std = (2.0 * h) ** 0.5 * noise_scale
+    theta_new = theta_prev - h * grads + noise_std * torch.randn(
         theta_prev.shape, device=device, dtype=theta_prev.dtype, generator=generator
     )
     unflatten_like(theta_new, model)

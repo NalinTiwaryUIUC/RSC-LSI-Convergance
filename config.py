@@ -44,10 +44,13 @@ class RunConfig:
     h: float = 1e-5
     alpha: float = 1e-2
     temperature: float = 1.0
+    noise_scale: float = 0.1  # multiplies Langevin noise term; <1 increases SNR without changing h
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
     progress_print_every: int = 10_000  # print progress to stdout every N steps (0 = disable)
+    pretrain_steps: int = 0  # number of full-batch SGD steps before ULA
+    pretrain_lr: float = 0.1  # learning rate for pretraining
     T: int = 200_000
     B: int = 50_000
     S: int = 200
@@ -65,6 +68,7 @@ class RunConfig:
     # Run metadata
     chain_id: int = 0
     run_dir: str | None = None
+    param_count: int | None = None  # set at run time for diagnostics (d = num params)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

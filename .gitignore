@@ -33,8 +33,12 @@ data/cifar-10-batches-py/
 data/*.tar.gz
 data/*.zip
 
-# Keep all experiment results for cumulative metrics (do not ignore):
-#   experiments/runs/     -> run_config.yaml, iter_metrics.jsonl, samples_metrics.npz
-#   experiments/summaries/ -> *.csv
-#   experiments/figures/   -> *.png
-#   experiments/data/      -> indices and projection .pt/.json (small, reproducible)
+# Keep all experiment results so they can be retrieved from cluster:
+#   experiments/runs/       -> run_config.yaml, iter_metrics.jsonl, samples_metrics.npz
+#   experiments/summaries/  -> *.csv
+#   experiments/figures/    -> *.png
+#   experiments/data/       -> indices and projection .pt/.json (small, reproducible)
+
+# Logs are small but you may or may not want them under version control.
+# Comment out the next line if you want to keep SLURM logs as well.
+# logs/

@@ -34,8 +34,11 @@ def write_iter_metrics(
     grad_norm: float | None = None,
     theta_norm: float | None = None,
     f_nll: float | None = None,
+    f_margin: float | None = None,
+    snr: float | None = None,
+    delta_U: float | None = None,
 ) -> None:
-    """Append one line to iter_metrics.jsonl."""
+    """Append one line to iter_metrics.jsonl (diagnostics for single-chain behaviour)."""
     path = Path(run_dir) / "iter_metrics.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {"step": step, "grad_evals": grad_evals}
@@ -47,6 +50,12 @@ def write_iter_metrics(
         record["theta_norm"] = theta_norm
     if f_nll is not None:
         record["f_nll"] = f_nll
+    if f_margin is not None:
+        record["f_margin"] = f_margin
+    if snr is not None:
+        record["snr"] = snr
+    if delta_U is not None:
+        record["delta_U"] = delta_U
     with open(path, "a") as f:
         f.write(json.dumps(record) + "\n")
 

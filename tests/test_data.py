@@ -18,27 +18,35 @@ class TestDataIndices(unittest.TestCase):
     def test_train_subset_indices_same_seed(self):
         from data.indices import get_train_subset_indices
 
+        num_train = 500
         idx1 = get_train_subset_indices(
-            64, dataset_seed=999, data_dir=self.data_dir, num_train=500
+            64, dataset_seed=999, data_dir=self.data_dir, num_train=num_train
         )
         idx2 = get_train_subset_indices(
-            64, dataset_seed=999, data_dir=self.data_dir, num_train=500
+            64, dataset_seed=999, data_dir=self.data_dir, num_train=num_train
         )
         self.assertEqual(len(idx1), 64)
         self.assertEqual(idx1, idx2)
         self.assertNotEqual(sorted(idx1), list(range(64)))
+        for i in idx1:
+            self.assertGreaterEqual(i, 0, msg="Train index out of range")
+            self.assertLess(i, num_train, msg="Train index out of range")
 
     def test_probe_indices_same_seed(self):
         from data.indices import get_probe_indices
 
+        num_test = 500
         idx1 = get_probe_indices(
-            32, dataset_seed=888, data_dir=self.data_dir, num_test=500
+            32, dataset_seed=888, data_dir=self.data_dir, num_test=num_test
         )
         idx2 = get_probe_indices(
-            32, dataset_seed=888, data_dir=self.data_dir, num_test=500
+            32, dataset_seed=888, data_dir=self.data_dir, num_test=num_test
         )
         self.assertEqual(len(idx1), 32)
         self.assertEqual(idx1, idx2)
+        for i in idx1:
+            self.assertGreaterEqual(i, 0, msg="Probe index out of range")
+            self.assertLess(i, num_test, msg="Probe index out of range")
 
 
 class TestDataLoaders(unittest.TestCase):
@@ -63,6 +71,8 @@ class TestDataLoaders(unittest.TestCase):
         x, y = batch
         self.assertEqual(x.shape, (32, 3, 32, 32))
         self.assertEqual(y.shape, (32,))
+        self.assertGreaterEqual(y.min().item(), 0, msg="CIFAR-10 labels must be in [0, 9]")
+        self.assertLess(y.max().item(), 10, msg="CIFAR-10 labels must be in [0, 9]")
 
     def test_probe_loader_shapes(self):
         from data.cifar import get_probe_loader
@@ -80,6 +90,8 @@ class TestDataLoaders(unittest.TestCase):
         self.assertEqual(x.shape[2], 32)
         self.assertEqual(x.shape[3], 32)
         self.assertEqual(y.shape, (32,))
+        self.assertGreaterEqual(y.min().item(), 0, msg="CIFAR-10 labels must be in [0, 9]")
+        self.assertLess(y.max().item(), 10, msg="CIFAR-10 labels must be in [0, 9]")
 
 
 if __name__ == "__main__":

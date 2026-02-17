@@ -19,7 +19,13 @@ class TestResNetCIFAR(unittest.TestCase):
     def test_param_count_scales_with_width(self):
         m_small = create_model(width_multiplier=0.5)
         m_large = create_model(width_multiplier=2.0)
-        self.assertGreater(param_count(m_large), param_count(m_small))
+        d_small = param_count(m_small)
+        d_large = param_count(m_large)
+        self.assertGreater(d_large, d_small)
+        # Width 2.0 vs 0.5 => channel counts scale 4x; param count should scale noticeably (> 2x)
+        ratio = d_large / d_small
+        self.assertGreaterEqual(ratio, 2.0, msg="Wider model should have at least 2x params")
+        self.assertLess(ratio, 50.0, msg="Param scaling should be plausible, not exploded")
 
 
 class TestParams(unittest.TestCase):

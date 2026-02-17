@@ -21,12 +21,19 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.
 
-### Option A: Run one chain at a time (local or single job)
+### Option A: Run one chain at a time (local or single job, with SGD warm-up)
 
 ```bash
 # Example: width 1, h=1e-5, 4 chains, n_train=1024 (plan defaults)
+# Add a short full-batch SGD warm-up before ULA via --pretrain-steps / --pretrain-lr.
 for chain in 0 1 2 3; do
-  python3 scripts/run_single_chain.py --width 1 --h 1e-5 --chain $chain --n_train 1024
+  python3 scripts/run_single_chain.py \
+    --width 1 \
+    --h 1e-5 \
+    --chain $chain \
+    --n_train 1024 \
+    --pretrain-steps 1000 \
+    --pretrain-lr 0.1
 done
 ```
 
@@ -37,10 +44,17 @@ Repeat for each (width, h) you want. Run dirs will be like:
 ### Option B: Full grid (sequential, for reference)
 
 ```bash
-# One width and h for illustration; extend to full grid as needed
+# One width and h for illustration; extend to full grid as needed.
+# Include SGD warm-up so chains start near a reasonable region.
 for w in 0.5 1 2 4; do
   for chain in 0 1 2 3; do
-    python3 scripts/run_single_chain.py --width $w --h 1e-5 --chain $chain --n_train 1024
+    python3 scripts/run_single_chain.py \
+      --width $w \
+      --h 1e-5 \
+      --chain $chain \
+      --n_train 1024 \
+      --pretrain-steps 1000 \
+      --pretrain-lr 0.1
   done
 done
 ```
@@ -98,7 +112,9 @@ Submit:
 ```bash
 for w in 0.5 1 2 4; do
   for c in 0 1 2 3; do
-    sbatch scripts/submit_chain.sh $w 1e-5 $c 1024
+    sbatch scripts/submit_chain.sh $w 1e-5 $c 1024   # submit_chain currently uses run_single_chain defaults
+    # If you want SGD warm-up on the cluster, edit scripts/submit_chain.sh
+    # to add: --pretrain-steps 1000 --pretrain-lr 0.1
   done
 done
 ```
@@ -125,6 +141,20 @@ The current implementation does not checkpoint mid-run. For very long runs (T=20
 | One chain         | `python3 scripts/run_single_chain.py --width 1 --h 1e-5 --chain 0 --n_train 1024` |
 | Unit tests        | `python3 -m unittest discover tests -v` |
 | Run outputs       | `experiments/runs/<run_name>/` (run_config.yaml, iter_metrics.jsonl, samples_metrics.npz) |
-| Mid-run checks    | `tail experiments/runs/<run_name>/iter_metrics.jsonl` (step, grad_evals, U_train); SLURM stdout shows progress every 10k steps |
+| Mid-run checks    | `tail experiments/runs/<run_name>/iter_metrics.jsonl`; SLURM stdout shows progress every 10k steps |
 | Summaries        | `experiments/summaries/*.csv` |
 | Figures          | `experiments/figures/*.png` (from `make_plots.py`) |
+
+### Single-chain diagnostics (from iter_metrics.jsonl + run_config.yaml)
+
+From one chain you can sanity-check behaviour using these logged fields:
+
+| Goal | What to check |
+|------|----------------|
+| **Not pure random walk** | `snr` in iter_metrics: should be in a meaningful band (e.g. > 1e-3). If snr ≪ 1e-3, drift is negligible vs noise. |
+| **Not deterministic** | `snr` should not be huge (e.g. < 0.1–1). If snr ≫ 1, chain is almost gradient descent. |
+| **Exploring (not stuck)** | `delta_U` and `U_train` over time: should fluctuate (delta_U positive and negative). Monotonic U or near-zero delta_U suggests stuck or purely drifting. |
+| **Reasonable region** | `f_nll`, `f_margin`: finite and in a plausible range (f_nll not exploding, f_margin not absurd). |
+| **Independent samples** | Run `compute_convergence.py` on the run dir(s) and check ESS; single-chain ESS is still informative. For R̂ you need multiple chains. |
+
+`run_config.yaml` includes `param_count` (d) so you can recompute SNR or interpret scales from logs.

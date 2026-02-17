@@ -41,6 +41,12 @@ class TestEvaluateProbes(unittest.TestCase):
             self.assertIn(k, ["f_nll", "f_margin", "f_pc1", "f_pc2", "f_proj1", "f_proj2", "f_dist"])
             self.assertIsInstance(v, float)
             self.assertTrue(torch.isfinite(torch.tensor(v)).item(), msg=k)
+        # f_nll is mean CE: for 10 classes, random init gives ~ln(10)≈2.3; must be finite and bounded
+        self.assertGreaterEqual(values["f_nll"], 0.0, msg="f_nll (CE) non-negative")
+        self.assertLess(values["f_nll"], 50.0, msg="f_nll should not explode on random init")
+        # f_margin can be negative (correct) or positive; magnitude should be bounded
+        self.assertGreater(values["f_margin"], -100.0)
+        self.assertLess(values["f_margin"], 100.0)
 
     def test_grad_norm_sq_one_probe(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -60,3 +66,4 @@ class TestEvaluateProbes(unittest.TestCase):
         self.assertIsInstance(grad_sq, float)
         self.assertGreaterEqual(grad_sq, 0.0)
         self.assertTrue(torch.isfinite(torch.tensor(grad_sq)).item())
+        self.assertGreater(grad_sq, 0.0, msg="grad_norm_sq for f_nll should be positive (non-degenerate)")
