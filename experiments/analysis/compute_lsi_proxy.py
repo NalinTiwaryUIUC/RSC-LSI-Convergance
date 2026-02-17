@@ -19,7 +19,6 @@ def compute_lsi_proxy(
     G: int,
     S: int,
     probe_names: list[str] | None = None,
-    inside_bt_only: bool = False,
 ) -> pd.DataFrame:
     """
     Pool post-burn-in samples across chains. For each probe with grad_norm_sq:
@@ -36,8 +35,6 @@ def compute_lsi_proxy(
         data = np.load(path)
         steps = data["step"]
         post_burn = steps > B
-        if inside_bt_only and "inside_bt" in data:
-            post_burn = post_burn & (data["inside_bt"] == 1)
         for p in probe_names:
             fkey = p
             gkey = f"grad_norm_sq__{p}"
@@ -77,12 +74,11 @@ def main() -> None:
     p.add_argument("--B", type=int, default=50_000)
     p.add_argument("--G", type=int, default=5)
     p.add_argument("--S", type=int, default=200)
-    p.add_argument("--inside-bt", action="store_true", help="Restrict to inside_bt samples")
     p.add_argument("-o", "--out", default="experiments/summaries/lsi_proxy.csv")
     args = p.parse_args()
     run_dirs = [Path(d) for d in args.run_dirs]
     df = compute_lsi_proxy(
-        run_dirs, args.B, args.G, args.S, inside_bt_only=args.inside_bt
+        run_dirs, args.B, args.G, args.S
     )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

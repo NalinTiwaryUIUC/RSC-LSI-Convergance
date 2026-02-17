@@ -1,6 +1,6 @@
 """
 One ULA step: theta = theta - h * grad_U + sqrt(2*h) * noise.
-Updates model in place; returns U (optional), theta_dist, bt_margin, inside_bt.
+Updates model in place. Step size h is kept small (e.g. 1e-5) for discretization.
 """
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import torch
 import torch.nn as nn
 
 from models.params import flatten_params, unflatten_like
-from .domain_bt import compute_bt_metrics
 from .potential import compute_U
 
 
@@ -19,16 +18,11 @@ def ula_step(
     train_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
     alpha: float,
     h: float,
-    rho2: float,
     device: torch.device,
     return_U: bool = False,
     generator: torch.Generator | None = None,
 ) -> dict[str, Any]:
-    """
-    Perform one ULA step. Modifies model parameters in place.
-    B_t: shifting ball — theta_dist = step length ||theta_new - theta_prev||_2.
-    Returns dict with theta_dist, bt_margin, inside_bt, and optionally U.
-    """
+    """Perform one ULA step. Modifies model parameters in place. Returns dict with optional U."""
     theta_prev = flatten_params(model).clone()
     model.zero_grad(set_to_none=True)
     U = compute_U(model, train_data, alpha, device)
@@ -40,12 +34,7 @@ def ula_step(
     )
     unflatten_like(theta_new, model)
 
-    theta_dist, bt_margin, inside_bt = compute_bt_metrics(theta_new, theta_prev, rho2)
-    out = {
-        "theta_dist": theta_dist,
-        "bt_margin": bt_margin,
-        "inside_bt": inside_bt,
-    }
+    out: dict[str, Any] = {}
     if return_U:
         out["U"] = U.detach().item()
     return out

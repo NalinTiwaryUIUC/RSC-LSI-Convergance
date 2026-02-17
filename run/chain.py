@@ -19,7 +19,6 @@ from probes import (
     get_or_create_param_projections,
 )
 from run.persistence import write_iter_metrics, write_run_config, write_samples_metrics
-from ula.domain_bt import get_rho2
 from ula.step import ula_step
 
 
@@ -68,8 +67,7 @@ def run_chain(
     g = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000)
     noise = torch.randn(d, device=device, generator=g) * sigma_init
     unflatten_like(theta0 + noise, model)
-    theta0_flat = theta0  # reference for B_t and probes
-    rho2 = get_rho2(theta0_flat, factor=config.rho2_factor)
+    theta0_flat = theta0  # reference for probes
 
     # Projections (fixed across chain) — move to device once
     v1, v2 = get_or_create_param_projections(
@@ -86,8 +84,6 @@ def run_chain(
     # Accumulators for saved samples
     steps_saved: List[int] = []
     grad_evals_saved: List[int] = []
-    inside_bt_saved: List[bool] = []
-    bt_margin_saved: List[float] = []
     f_values: Dict[str, List[float]] = {
         "f_nll": [], "f_margin": [], "f_pc1": [], "f_pc2": [],
         "f_proj1": [], "f_proj2": [], "f_dist": [],
@@ -103,26 +99,21 @@ def run_chain(
             train_data,
             config.alpha,
             config.h,
-            rho2,
             device,
             return_U=(log_U_every is not None and step % log_U_every == 0),
             generator=gen,
         )
-        write_iter_metrics(
-            step=step,
-            grad_evals=step,
-            theta_dist=out["theta_dist"],
-            bt_margin=out["bt_margin"],
-            inside_bt=out["inside_bt"],
-            run_dir=run_dir,
-            U_train=out.get("U"),
-        )
+        if step % config.log_every == 0 or step == 1:
+            write_iter_metrics(
+                step=step,
+                grad_evals=step,
+                run_dir=run_dir,
+                U_train=out.get("U"),
+            )
 
         if step % S == 0 and step > B:
             steps_saved.append(step)
             grad_evals_saved.append(step)
-            inside_bt_saved.append(out["inside_bt"])
-            bt_margin_saved.append(out["bt_margin"])
             vals = evaluate_probes(
                 model, probe_data, theta0_flat, v1, v2, logit_proj, device
             )
@@ -142,8 +133,6 @@ def run_chain(
         run_dir,
         steps_saved,
         grad_evals_saved,
-        inside_bt_saved,
-        bt_margin_saved,
         f_values,
         grad_norm_sq,
     )

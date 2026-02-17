@@ -46,14 +46,12 @@ class RunConfig:
     temperature: float = 1.0
 
     # Chain
+    log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
     T: int = 200_000
     B: int = 50_000
     S: int = 200
     K: int = 4
     sigma_init_scale: float = 1e-4
-
-    # Domain B_t
-    rho2_factor: float = 0.05  # rho2 = rho2_factor * r0
 
     # Probes / LSI
     grad_norm_stride: int = 5  # compute grad norms every G saved samples

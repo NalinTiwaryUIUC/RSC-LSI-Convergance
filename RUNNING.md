@@ -16,7 +16,7 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 ### Plan summary (from EXPERIMENT_PLAN_LSI_PYTORCH.md)
 
 - **Widths**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
-- **Step sizes**: For each width, pick the largest `h ∈ {1e-6, 5e-6, 1e-5, 2e-5}` such that post burn-in B_t violation rate < 1%; then also run `h/2` (discretization check).
+- **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.
@@ -50,17 +50,14 @@ done
 Run analysis and plots on the run dirs for that (width, h):
 
 ```bash
-# B_t fidelity (violation rate)
-python3 experiments/analysis/compute_bt_fidelity.py experiments/runs/w1_n1024_h1e-5_chain0 experiments/runs/w1_n1024_h1e-5_chain1 experiments/runs/w1_n1024_h1e-5_chain2 experiments/runs/w1_n1024_h1e-5_chain3 --B 50000 -o experiments/summaries/bt_fidelity.csv
-
 # Convergence (Rhat, ESS, ESS-rate)
 python3 experiments/analysis/compute_convergence.py experiments/runs/w1_n1024_h1e-5_chain{0,1,2,3} --B 50000 --S 200 -o experiments/summaries/convergence.csv
 
 # Proxy LSI
 python3 experiments/analysis/compute_lsi_proxy.py experiments/runs/w1_n1024_h1e-5_chain{0,1,2,3} --B 50000 --G 5 --S 200 -o experiments/summaries/lsi_proxy.csv
 
-# Plots (use run dirs and summary CSVs you produced)
-python3 experiments/analysis/make_plots.py --run-dirs experiments/runs/w1_n1024_h1e-5_chain0 ... --bt-csv experiments/summaries/bt_fidelity.csv --convergence-csv experiments/summaries/convergence.csv --lsi-csv experiments/summaries/lsi_proxy.csv -o experiments/figures
+# Plots (use summary CSVs you produced)
+python3 experiments/analysis/make_plots.py --convergence-csv experiments/summaries/convergence.csv --lsi-csv experiments/summaries/lsi_proxy.csv -o experiments/figures
 ```
 
 You can aggregate summaries per (width, h) and then plot across widths (e.g. ESS-rate vs width, rho_hat vs width) by editing the plot script or merging CSVs with a `width`/`h` column.
@@ -111,7 +108,7 @@ Adjust SBATCH options in `scripts/submit_chain.sh` (time, mem, account, partitio
 ### 5. After jobs finish
 
 - Collect `experiments/runs/` (all run dirs) on one machine or a shared filesystem.
-- Run the analysis scripts (compute_bt_fidelity, compute_convergence, compute_lsi_proxy) with the appropriate run dirs for each (width, h).
+- Run the analysis scripts (compute_convergence, compute_lsi_proxy) with the appropriate run dirs for each (width, h).
 - Run `make_plots.py` with the summary CSVs and run dirs to produce figures.
 
 ### 6. Optional: checkpointing / resume
