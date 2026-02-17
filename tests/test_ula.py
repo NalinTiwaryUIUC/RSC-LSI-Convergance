@@ -43,10 +43,11 @@ class TestPotential(unittest.TestCase):
 
 class TestDomainBt(unittest.TestCase):
     def test_inside_bt(self):
-        theta0 = torch.randn(100)
-        theta = theta0 + 0.001 * torch.randn(100)
-        rho2 = get_rho2(theta0, factor=0.05)
-        theta_dist, bt_margin, inside_bt = compute_bt_metrics(theta, theta0, rho2)
+        """Shifting ball: step length small -> inside_bt True."""
+        theta_prev = torch.randn(100)
+        theta_new = theta_prev + 0.001 * torch.randn(100)  # small step
+        rho2 = get_rho2(theta_prev, factor=0.05)
+        theta_dist, bt_margin, inside_bt = compute_bt_metrics(theta_new, theta_prev, rho2)
         self.assertIsInstance(theta_dist, float)
         self.assertIsInstance(bt_margin, float)
         self.assertIsInstance(inside_bt, bool)
@@ -62,8 +63,7 @@ class TestULAStep(unittest.TestCase):
         theta0 = flatten_params(model).clone()
         rho2 = get_rho2(theta0, factor=0.05)
         out = ula_step(
-            model, train, alpha=1e-2, h=1e-5, theta0_flat=theta0,
-            rho2=rho2, device=device, return_U=True,
+            model, train, alpha=1e-2, h=1e-5, rho2=rho2, device=device, return_U=True,
         )
         theta_after = flatten_params(model)
         self.assertFalse(torch.allclose(theta_after, theta0))

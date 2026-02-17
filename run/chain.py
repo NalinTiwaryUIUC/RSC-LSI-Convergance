@@ -40,6 +40,18 @@ def run_chain(
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    # GPU optimizations: cuDNN benchmark (fixed input size) and pre-load data to device
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+    x_train, y_train = next(iter(train_loader))
+    x_train = x_train.to(device, non_blocking=True)
+    y_train = y_train.to(device, non_blocking=True)
+    x_probe, y_probe = next(iter(probe_loader))
+    x_probe = x_probe.to(device, non_blocking=True)
+    y_probe = y_probe.to(device, non_blocking=True)
+    train_data = (x_train, y_train)
+    probe_data = (x_probe, y_probe)
+
     # Config for this chain
     config.chain_id = chain_id
     config.run_dir = str(run_dir)
@@ -59,16 +71,17 @@ def run_chain(
     theta0_flat = theta0  # reference for B_t and probes
     rho2 = get_rho2(theta0_flat, factor=config.rho2_factor)
 
-    # Projections (fixed across chain)
+    # Projections (fixed across chain) — move to device once
     v1, v2 = get_or_create_param_projections(
         d, seed=config.probe_projection_seed, data_dir=config.data_dir
     )
+    v1, v2 = v1.to(device), v2.to(device)
     probe_size = config.probe_size
     num_classes = config.num_classes
     logit_dim = probe_size * num_classes
     logit_proj = get_or_create_logit_projection(
         logit_dim, seed=config.probe_projection_seed + 1, data_dir=config.data_dir
-    )
+    ).to(device)
 
     # Accumulators for saved samples
     steps_saved: List[int] = []
@@ -87,10 +100,9 @@ def run_chain(
         gen = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + step)
         out = ula_step(
             model,
-            train_loader,
+            train_data,
             config.alpha,
             config.h,
-            theta0_flat,
             rho2,
             device,
             return_U=(log_U_every is not None and step % log_U_every == 0),
@@ -112,7 +124,7 @@ def run_chain(
             inside_bt_saved.append(out["inside_bt"])
             bt_margin_saved.append(out["bt_margin"])
             vals = evaluate_probes(
-                model, probe_loader, theta0_flat, v1, v2, logit_proj, device
+                model, probe_data, theta0_flat, v1, v2, logit_proj, device
             )
             for k, v in vals.items():
                 f_values[k].append(v)
@@ -121,7 +133,7 @@ def run_chain(
             if saved_count % G == 0:
                 for pname in PROBES_FOR_GRAD_NORM:
                     f_scalar = get_probe_value_for_grad(
-                        model, probe_loader, theta0_flat, v1, v2, logit_proj, pname, device
+                        model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device
                     )
                     gs = compute_grad_norm_sq(f_scalar, model.parameters())
                     grad_norm_sq[pname].append(gs)

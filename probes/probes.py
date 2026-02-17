@@ -3,7 +3,7 @@ Probe functions f(θ): NLL, margin, logit projections, param projections, dist.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -42,7 +42,7 @@ def _logits_flatten(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
 
 def evaluate_probes(
     model: nn.Module,
-    probe_loader: torch.utils.data.DataLoader,
+    probe_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
     theta0_flat: torch.Tensor,
     v1: torch.Tensor,
     v2: torch.Tensor,
@@ -51,10 +51,13 @@ def evaluate_probes(
 ) -> Dict[str, float]:
     """
     Evaluate all probes. Returns dict probe_name -> scalar value.
-    Uses model in eval mode and no_grad except not applicable for values only.
+    probe_data: DataLoader or (x, y) tensors already on device (pre-load for speed).
     """
-    (x, y) = next(iter(probe_loader))
-    x, y = x.to(device), y.to(device)
+    if isinstance(probe_data, tuple):
+        x, y = probe_data
+    else:
+        (x, y) = next(iter(probe_data))
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     theta0_flat = theta0_flat.to(device)
     v1, v2 = v1.to(device), v2.to(device)
     logit_proj = logit_proj.to(device)
@@ -101,7 +104,7 @@ def _theta_flat_with_grad(model: nn.Module, device: torch.device) -> torch.Tenso
 
 def get_probe_value_for_grad(
     model: nn.Module,
-    probe_loader: torch.utils.data.DataLoader,
+    probe_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
     theta0_flat: torch.Tensor,
     v1: torch.Tensor,
     v2: torch.Tensor,
@@ -111,10 +114,13 @@ def get_probe_value_for_grad(
 ) -> torch.Tensor:
     """
     Compute a single probe value *with* grad (for computing grad_norm_sq).
-    Model must allow grad. Returns scalar tensor.
+    probe_data: DataLoader or (x, y) tensors already on device.
     """
-    (x, y) = next(iter(probe_loader))
-    x, y = x.to(device), y.to(device)
+    if isinstance(probe_data, tuple):
+        x, y = probe_data
+    else:
+        (x, y) = next(iter(probe_data))
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     theta0_flat = theta0_flat.to(device)
     v1, v2 = v1.to(device), v2.to(device)
     logit_proj = logit_proj.to(device)
