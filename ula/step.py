@@ -37,4 +37,8 @@ def ula_step(
     out: dict[str, Any] = {}
     if return_U:
         out["U"] = U.detach().item()
+        grad_norm = grads.norm().item()
+        theta_norm = theta_new.norm().item()
+        out["grad_norm"] = grad_norm
+        out["theta_norm"] = theta_norm
     return out

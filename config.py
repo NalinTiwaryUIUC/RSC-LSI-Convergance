@@ -47,6 +47,7 @@ class RunConfig:
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
+    progress_print_every: int = 10_000  # print progress to stdout every N steps (0 = disable)
     T: int = 200_000
     B: int = 50_000
     S: int = 200

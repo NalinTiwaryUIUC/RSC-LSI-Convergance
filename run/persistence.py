@@ -31,6 +31,9 @@ def write_iter_metrics(
     grad_evals: int,
     run_dir: str | Path,
     U_train: float | None = None,
+    grad_norm: float | None = None,
+    theta_norm: float | None = None,
+    f_nll: float | None = None,
 ) -> None:
     """Append one line to iter_metrics.jsonl."""
     path = Path(run_dir) / "iter_metrics.jsonl"
@@ -38,6 +41,12 @@ def write_iter_metrics(
     record = {"step": step, "grad_evals": grad_evals}
     if U_train is not None:
         record["U_train"] = U_train
+    if grad_norm is not None:
+        record["grad_norm"] = grad_norm
+    if theta_norm is not None:
+        record["theta_norm"] = theta_norm
+    if f_nll is not None:
+        record["f_nll"] = f_nll
     with open(path, "a") as f:
         f.write(json.dumps(record) + "\n")
 

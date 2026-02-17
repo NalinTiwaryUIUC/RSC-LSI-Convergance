@@ -125,5 +125,6 @@ The current implementation does not checkpoint mid-run. For very long runs (T=20
 | One chain         | `python3 scripts/run_single_chain.py --width 1 --h 1e-5 --chain 0 --n_train 1024` |
 | Unit tests        | `python3 -m unittest discover tests -v` |
 | Run outputs       | `experiments/runs/<run_name>/` (run_config.yaml, iter_metrics.jsonl, samples_metrics.npz) |
+| Mid-run checks    | `tail experiments/runs/<run_name>/iter_metrics.jsonl` (step, grad_evals, U_train); SLURM stdout shows progress every 10k steps |
 | Summaries        | `experiments/summaries/*.csv` |
 | Figures          | `experiments/figures/*.png` (from `make_plots.py`) |

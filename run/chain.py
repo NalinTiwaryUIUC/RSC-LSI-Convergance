@@ -92,6 +92,7 @@ def run_chain(
     saved_count = 0
 
     T, B, S, G = config.T, config.B, config.S, config.grad_norm_stride
+    log_U_every = config.log_every if log_U_every is None else log_U_every
     for step in range(1, T + 1):
         gen = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + step)
         out = ula_step(
@@ -100,16 +101,36 @@ def run_chain(
             config.alpha,
             config.h,
             device,
-            return_U=(log_U_every is not None and step % log_U_every == 0),
+            return_U=(step % log_U_every == 0 or step == 1),
             generator=gen,
         )
         if step % config.log_every == 0 or step == 1:
+            vals = evaluate_probes(
+                model, probe_data, theta0_flat, v1, v2, logit_proj, device
+            )
+            f_nll_val = vals.get("f_nll")
             write_iter_metrics(
                 step=step,
                 grad_evals=step,
                 run_dir=run_dir,
                 U_train=out.get("U"),
+                grad_norm=out.get("grad_norm"),
+                theta_norm=out.get("theta_norm"),
+                f_nll=f_nll_val,
             )
+
+        if config.progress_print_every > 0 and step % config.progress_print_every == 0:
+            pct = 100 * step / T
+            parts = [f"chain {chain_id} step {step}/{T} ({pct:.1f}%)"]
+            if "U" in out:
+                parts.append(f"U={out['U']:.1f}")
+            if "grad_norm" in out:
+                parts.append(f"||∇U||={out['grad_norm']:.1f}")
+            if "theta_norm" in out:
+                parts.append(f"||θ||={out['theta_norm']:.0f}")
+            if step % config.log_every == 0 or step == 1:
+                parts.append(f"f_nll={vals.get('f_nll', float('nan')):.3f}")
+            print(" ".join(parts))
 
         if step % S == 0 and step > B:
             steps_saved.append(step)
