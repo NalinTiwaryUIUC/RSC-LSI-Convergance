@@ -44,7 +44,7 @@ class RunConfig:
     h: float = 1e-5
     alpha: float = 1e-2
     temperature: float = 1.0
-    noise_scale: float = 0.03  # multiplies Langevin noise term; <1 increases SNR (reduce if chain drifts up in U)
+    noise_scale: float = 0.00002  # multiplies Langevin noise term; ~1500x lower than 0.03 for SNR in 1e-3–1e-1 band
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
