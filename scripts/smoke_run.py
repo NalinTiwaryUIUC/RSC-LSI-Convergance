@@ -21,21 +21,23 @@ def main() -> None:
     ensure_directories()
     device = get_device()
     use_gpu = device.type == "cuda"
+    defaults = RunConfig()
     config = RunConfig(
         n_train=128,
         probe_size=32,
         width_multiplier=0.5,
-        h=1e-5,
-        alpha=1e-2,
-        noise_scale=0.03,
+        h=defaults.h,
+        alpha=defaults.alpha,
+        noise_scale=defaults.noise_scale,
         T=500,
         B=100,
         S=50,
         K=1,
         pretrain_steps=200,
-        pretrain_lr=0.1,
+        pretrain_lr=defaults.pretrain_lr,
         chain_seed=0,
-        dataset_seed=42,
+        dataset_seed=defaults.dataset_seed,
+        data_dir=defaults.data_dir,
     )
     train_loader = get_train_loader(
         config.n_train,

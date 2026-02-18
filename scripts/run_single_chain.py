@@ -17,25 +17,27 @@ from config import RunConfig, ensure_directories, get_device
 from data import get_probe_loader, get_train_loader
 from run.chain import run_chain
 
+_DEFAULTS = RunConfig()
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Run one ULA chain")
-    p.add_argument("--width", type=float, default=1.0, help="Width multiplier w (0.5, 1, 2, 4)")
-    p.add_argument("--h", type=float, default=1e-5, help="Step size")
+    p.add_argument("--width", type=float, default=_DEFAULTS.width_multiplier, help="Width multiplier w (0.5, 1, 2, 4)")
+    p.add_argument("--h", type=float, default=_DEFAULTS.h, help="Step size")
     p.add_argument("--chain", type=int, default=0, help="Chain id (0 .. K-1)")
-    p.add_argument("--n_train", type=int, default=1024, help="Training subset size (512, 1024, 2048)")
-    p.add_argument("--probe_size", type=int, default=512, help="Probe set size")
-    p.add_argument("--T", type=int, default=200_000, help="Total steps")
-    p.add_argument("--B", type=int, default=50_000, help="Burn-in steps")
-    p.add_argument("--S", type=int, default=200, help="Save stride")
-    p.add_argument("--pretrain-steps", type=int, default=2000, help="Full-batch SGD steps before ULA")
-    p.add_argument("--pretrain-lr", type=float, default=0.1, help="Learning rate for pretraining")
-    p.add_argument("--data_dir", type=str, default="experiments/data", help="Indices and projections")
+    p.add_argument("--n_train", type=int, default=_DEFAULTS.n_train, help="Training subset size")
+    p.add_argument("--probe_size", type=int, default=_DEFAULTS.probe_size, help="Probe set size")
+    p.add_argument("--T", type=int, default=_DEFAULTS.T, help="Total steps")
+    p.add_argument("--B", type=int, default=_DEFAULTS.B, help="Burn-in steps")
+    p.add_argument("--S", type=int, default=_DEFAULTS.S, help="Save stride")
+    p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA")
+    p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
+    p.add_argument("--data_dir", type=str, default=_DEFAULTS.data_dir, help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
-    p.add_argument("--seed", type=int, default=42, help="Dataset seed")
-    p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto (cuda if available)")
-    p.add_argument("--noise-scale", type=float, default=0.03, help="Langevin noise scale (<1 = higher SNR)")
+    p.add_argument("--seed", type=int, default=_DEFAULTS.dataset_seed, help="Dataset seed")
+    p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
+    p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (<1 = higher SNR)")
     args = p.parse_args()
 
     ensure_directories()
@@ -50,11 +52,11 @@ def main() -> None:
         probe_size=args.probe_size,
         width_multiplier=args.width,
         h=args.h,
-        alpha=1e-2,
+        alpha=_DEFAULTS.alpha,
         T=args.T,
         B=args.B,
         S=args.S,
-        K=4,
+        K=_DEFAULTS.K,
         noise_scale=args.noise_scale,
         pretrain_steps=args.pretrain_steps,
         pretrain_lr=args.pretrain_lr,
