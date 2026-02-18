@@ -125,7 +125,7 @@ class TestSignalToNoise(unittest.TestCase):
         self.assertLess(snr, 5e-2)
 
     def test_snr_n1024(self):
-        """SNR at n=1024 with default noise_scale (0.00002) should be in 1e-3–1e-1 band."""
+        """SNR at n=1024 with default noise_scale (0.0001) should be in 1e-3–1e-1 band."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = create_model(width_multiplier=0.5).to(device)
         train, _ = _get_n1024_loader()
@@ -135,7 +135,7 @@ class TestSignalToNoise(unittest.TestCase):
         grads = torch.cat([p.grad.view(-1) for p in model.parameters()])
         d = grads.numel()
         h = 1e-5
-        noise_scale = 0.00002  # default from config (~1500x lower than 0.03)
+        noise_scale = 0.0001  # default from config
         signal = h * grads.norm().item()
         noise = (2.0 * h * d) ** 0.5 * noise_scale
         snr = signal / noise if noise > 0 else float("nan")

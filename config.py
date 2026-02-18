@@ -41,10 +41,10 @@ class RunConfig:
     num_classes: int = 10
 
     # ULA
-    h: float = 1e-5
+    h: float = 5e-5  # 5x larger for more movement per step
     alpha: float = 1e-2
     temperature: float = 1.0
-    noise_scale: float = 0.00002  # multiplies Langevin noise term; ~1500x lower than 0.03 for SNR in 1e-3–1e-1 band
+    noise_scale: float = 0.0001  # 5x larger for more exploration; SNR ~1e-3–1e-1
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
