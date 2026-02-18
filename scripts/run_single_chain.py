@@ -28,13 +28,14 @@ def main() -> None:
     p.add_argument("--T", type=int, default=200_000, help="Total steps")
     p.add_argument("--B", type=int, default=50_000, help="Burn-in steps")
     p.add_argument("--S", type=int, default=200, help="Save stride")
-    p.add_argument("--pretrain-steps", type=int, default=0, help="Full-batch SGD steps before ULA")
+    p.add_argument("--pretrain-steps", type=int, default=2000, help="Full-batch SGD steps before ULA")
     p.add_argument("--pretrain-lr", type=float, default=0.1, help="Learning rate for pretraining")
     p.add_argument("--data_dir", type=str, default="experiments/data", help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
     p.add_argument("--seed", type=int, default=42, help="Dataset seed")
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto (cuda if available)")
+    p.add_argument("--noise-scale", type=float, default=0.03, help="Langevin noise scale (<1 = higher SNR)")
     args = p.parse_args()
 
     ensure_directories()
@@ -54,8 +55,9 @@ def main() -> None:
         B=args.B,
         S=args.S,
         K=4,
-         pretrain_steps=args.pretrain_steps,
-         pretrain_lr=args.pretrain_lr,
+        noise_scale=args.noise_scale,
+        pretrain_steps=args.pretrain_steps,
+        pretrain_lr=args.pretrain_lr,
         chain_seed=args.seed + args.chain * 1000,
         dataset_seed=args.seed,
         data_dir=args.data_dir,

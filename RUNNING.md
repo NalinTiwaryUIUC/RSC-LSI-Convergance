@@ -17,6 +17,8 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 
 - **Widths**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
+- **Noise scale**: Default 0.03 (reduces Langevin noise so SNR is higher; if U drifts up monotonically, try 0.02 or 0.01).
+- **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode.
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.

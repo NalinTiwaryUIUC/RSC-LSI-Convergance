@@ -27,6 +27,7 @@ class TestChainPersistence(unittest.TestCase):
             T=10,
             B=2,
             S=2,
+            pretrain_steps=0,
             data_dir=data_dir,
         )
         train_loader = get_train_loader(

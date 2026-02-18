@@ -20,6 +20,15 @@ def _get_small_loaders():
     return train, data_dir
 
 
+def _get_n1024_loader():
+    """Full-batch loader with n=1024 for SNR test at production-like scale."""
+    data_dir = tempfile.mkdtemp(prefix="lsi_test_ula_n1024_")
+    train = get_train_loader(
+        n=1024, batch_size=1024, dataset_seed=42, data_dir=data_dir, root="./data"
+    )
+    return train, data_dir
+
+
 class TestPotential(unittest.TestCase):
     def test_compute_U_scalar(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -114,3 +123,22 @@ class TestSignalToNoise(unittest.TestCase):
         self.assertTrue(torch.isfinite(torch.tensor(snr)).item())
         self.assertGreater(snr, 1e-3)
         self.assertLess(snr, 5e-2)
+
+    def test_snr_n1024(self):
+        """SNR at n=1024 with default noise_scale=0.03 should be in a reasonable band."""
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = create_model(width_multiplier=0.5).to(device)
+        train, _ = _get_n1024_loader()
+        model.zero_grad(set_to_none=True)
+        U = compute_U(model, train, alpha=1e-2, device=device)
+        U.backward()
+        grads = torch.cat([p.grad.view(-1) for p in model.parameters()])
+        d = grads.numel()
+        h = 1e-5
+        noise_scale = 0.03  # default from config
+        signal = h * grads.norm().item()
+        noise = (2.0 * h * d) ** 0.5 * noise_scale
+        snr = signal / noise if noise > 0 else float("nan")
+        self.assertTrue(torch.isfinite(torch.tensor(snr)).item(), msg=f"SNR should be finite, got {snr}")
+        self.assertGreater(snr, 1e-3, msg=f"SNR too low at n=1024: {snr}")
+        self.assertLess(snr, 0.2, msg=f"SNR too high at n=1024: {snr}")

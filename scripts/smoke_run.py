@@ -27,10 +27,13 @@ def main() -> None:
         width_multiplier=0.5,
         h=1e-5,
         alpha=1e-2,
+        noise_scale=0.03,
         T=500,
         B=100,
         S=50,
         K=1,
+        pretrain_steps=200,
+        pretrain_lr=0.1,
         chain_seed=0,
         dataset_seed=42,
     )
