@@ -78,6 +78,67 @@ You can aggregate summaries per (width, h) and then plot across widths (e.g. ESS
 
 ---
 
+## Running on Google Colab
+
+1. **Enable GPU**  
+   Runtime → Change runtime type → Hardware accelerator: **GPU** (e.g. T4).
+
+2. **Get the project**  
+   Either clone from git or upload the project (e.g. as a zip) and unzip in `/content/`:
+   ```bash
+   # Option A: clone (if you have a repo)
+   !git clone https://github.com/YOUR_USER/RSC_Conv.git
+   %cd RSC_Conv
+
+   # Option B: upload RSC_Conv.zip then
+   # !unzip -q RSC_Conv.zip && cd RSC_Conv
+   ```
+
+3. **Install dependencies**  
+   In a cell:
+   ```bash
+   %pip install -q -r requirements.txt
+   ```
+   Colab already has PyTorch; this aligns torchvision and the rest.
+
+4. **Run from project root**  
+   Use the same commands as local, from the notebook (with `!` or `%run`):
+   ```bash
+   # Quick smoke (T=500) to check everything works
+   !python3 scripts/smoke_run.py
+
+   # Or one short chain with pretrain (e.g. T=2000 for a fast test)
+   !python3 scripts/run_single_chain.py --width 1 --h 1e-5 --chain 0 --n_train 512 \
+     --T 2000 --B 500 --S 100 --pretrain-steps 500 --pretrain-lr 0.1
+   ```
+   For a full single chain (T=200k), use the same args as in Option A above (no `--T`/`--B`/`--S`); runtime may be several hours and Colab can disconnect after ~12h, so keep that in mind.
+
+5. **CIFAR-10 and data dir**  
+   On first run, CIFAR-10 is downloaded under `./data`. Indices and projections are created under `experiments/data/` automatically when you run a chain.
+
+6. **Keeping results across sessions**  
+   To avoid losing runs if the runtime disconnects, mount Drive and point outputs there:
+   ```python
+   from google.colab import drive
+   drive.mount('/content/drive')
+   ```
+   Then run with:
+   ```bash
+   !python3 scripts/run_single_chain.py ... --runs_dir /content/drive/MyDrive/RSC_Conv_runs
+   ```
+   (Create `RSC_Conv_runs` in Drive first, or use any folder you prefer.)
+
+7. **Analysis and plots**  
+   After a run, from the project root:
+   ```bash
+   !python3 experiments/analysis/compute_convergence.py experiments/runs/w1_n512_h1e-05_chain0 --B 500 --S 100 -o experiments/summaries/convergence.csv
+   !python3 experiments/analysis/compute_lsi_proxy.py experiments/runs/w1_n512_h1e-05_chain0 --B 500 --G 5 --S 100 -o experiments/summaries/lsi_proxy.csv
+   !python3 experiments/analysis/make_plots.py --convergence-csv experiments/summaries/convergence.csv --lsi-csv experiments/summaries/lsi_proxy.csv -o experiments/figures
+   ```
+   Adjust `--B` and `--S` to match the chain you ran. View figures in the Files panel or with `from IPython.display import Image; Image('experiments/figures/ess_rate_vs_width.png')`.
+
+---
+
 ## External compute (SLURM, cloud, etc.)
 
 ### 1. Copy the project
@@ -135,6 +196,7 @@ The current implementation does not checkpoint mid-run. For very long runs (T=20
 
 | What              | Command / path |
 |-------------------|----------------|
+| Colab             | See **Running on Google Colab** (GPU, pip install, then same commands as local). |
 | Smoke run         | `python3 scripts/smoke_run.py` |
 | One chain         | `python3 scripts/run_single_chain.py --width 1 --h 1e-5 --chain 0 --n_train 1024` |
 | Unit tests        | `python3 -m unittest discover tests -v` |
