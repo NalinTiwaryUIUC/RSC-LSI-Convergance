@@ -112,9 +112,7 @@ Submit:
 ```bash
 for w in 0.5 1 2 4; do
   for c in 0 1 2 3; do
-    sbatch scripts/submit_chain.sh $w 1e-5 $c 1024   # submit_chain currently uses run_single_chain defaults
-    # If you want SGD warm-up on the cluster, edit scripts/submit_chain.sh
-    # to add: --pretrain-steps 1000 --pretrain-lr 0.1
+    sbatch scripts/submit_chain.sh $w 1e-5 $c 1024
   done
 done
 ```

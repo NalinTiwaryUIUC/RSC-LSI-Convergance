@@ -92,6 +92,8 @@ python3 scripts/run_single_chain.py \
     --h "$H" \
     --chain "$CHAIN" \
     --n_train "$N_TRAIN" \
+    --pretrain-steps 1000 \
+    --pretrain-lr 0.1 \
     --data_dir experiments/data \
     --runs_dir experiments/runs \
     --root ./data
