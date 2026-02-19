@@ -44,7 +44,7 @@ class RunConfig:
     h: float = 1e-4  # larger steps for more movement
     alpha: float = 1e-2
     temperature: float = 1.0
-    noise_scale: float = 0.001
+    noise_scale: float = 0.005
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
