@@ -42,9 +42,9 @@ class RunConfig:
 
     # ULA
     h: float = 1e-4  # larger steps for more movement
-    alpha: float = 1e-2
+    alpha: float = 0.05  # stronger prior to counteract drift; tune with noise_scale
     temperature: float = 1.0
-    noise_scale: float = 0.005
+    noise_scale: float = 0.002  # between stuck (low) and drift (high); tune with alpha
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)

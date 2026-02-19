@@ -38,6 +38,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=_DEFAULTS.dataset_seed, help="Dataset seed")
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (<1 = higher SNR)")
+    p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     args = p.parse_args()
 
     ensure_directories()
@@ -52,7 +53,7 @@ def main() -> None:
         probe_size=args.probe_size,
         width_multiplier=args.width,
         h=args.h,
-        alpha=_DEFAULTS.alpha,
+        alpha=args.alpha,
         T=args.T,
         B=args.B,
         S=args.S,
