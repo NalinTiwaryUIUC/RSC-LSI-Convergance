@@ -42,7 +42,7 @@ class RunConfig:
 
     # ULA
     h: float = 1e-4  # larger steps for more movement
-    alpha: float = 0.05  # stronger prior to counteract drift; tune with noise_scale
+    alpha: float = 0.01  # reduced from 0.05 to lessen ∇NLL/αθ cancellation; improves SNR
     temperature: float = 1.0
     noise_scale: float = 0.002  # between stuck (low) and drift (high); tune with alpha
 
