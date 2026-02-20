@@ -8,7 +8,7 @@ num_classes: 10
 h: 0.0001
 alpha: 0.01
 temperature: 1.0
-noise_scale: 0.002
+noise_scale: 0.0086
 log_every: 1000
 progress_print_every: 10000
 pretrain_steps: 2000
