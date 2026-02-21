@@ -110,6 +110,7 @@ def run_chain(
         )
 
     theta0_flat = flatten_params(model).clone().detach()  # reference for probes
+    model.eval()  # ULA sampling: BN uses running stats (no updates)
 
     # Projections (fixed across chain) — move to device once
     v1, v2 = get_or_create_param_projections(

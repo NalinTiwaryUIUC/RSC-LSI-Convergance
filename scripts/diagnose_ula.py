@@ -119,6 +119,7 @@ def main() -> None:
         print(f"WARNING: decomposition residual ||∇U - (∇NLL+αθ)|| = {residual:.2e} (should be ~0)")
 
     # Cross-check: compute ∇(mean_CE) directly (no prior)
+    model.eval()
     model.zero_grad(set_to_none=True)
     if isinstance(train_data, tuple):
         xc, yc = train_data

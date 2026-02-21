@@ -125,7 +125,7 @@ def get_probe_value_for_grad(
     v1, v2 = v1.to(device), v2.to(device)
     logit_proj = logit_proj.to(device)
 
-    model.train()
+    model.eval()  # Match evaluate_probes; gradients flow through eval (BN uses running stats)
     theta_flat = _theta_flat_with_grad(model, device)
     diff = theta_flat - theta0_flat
 
