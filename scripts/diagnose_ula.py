@@ -47,6 +47,8 @@ def main() -> None:
     p.add_argument("--data_dir", type=str, default=None)
     p.add_argument("--root", type=str, default="./data")
     p.add_argument("--seed", type=int, default=None, help="Dataset seed; config default if not set")
+    p.add_argument("--bn-mode", type=str, default="eval", choices=["eval", "batchstat_frozen"],
+                   help="BN mode for gradient computation; eval=reproducible, batchstat_frozen=ULA-like")
     args = p.parse_args()
 
     ensure_directories()
@@ -99,6 +101,15 @@ def main() -> None:
     theta = flatten_params(model).clone().detach()
     theta_norm = theta.norm().item()
     theta_sq = (theta_norm ** 2)
+
+    # Set BN mode before gradient computation
+    if args.bn_mode == "eval":
+        model.eval()
+    elif args.bn_mode == "batchstat_frozen":
+        from run.bn_mode import set_bn_batchstats_freeze_buffers
+        set_bn_batchstats_freeze_buffers(model)
+    else:
+        raise ValueError(f"Unknown bn_mode: {args.bn_mode}")
 
     # Full gradient: ∇U = ∇NLL + αθ
     # U = mean_CE + (α/2)||θ||²  =>  ∇U = ∇(mean_CE) + αθ

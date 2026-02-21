@@ -37,6 +37,7 @@ def write_iter_metrics(
     f_margin: float | None = None,
     snr: float | None = None,
     delta_U: float | None = None,
+    **extra: Any,
 ) -> None:
     """Append one line to iter_metrics.jsonl (diagnostics for single-chain behaviour)."""
     path = Path(run_dir) / "iter_metrics.jsonl"
@@ -56,8 +57,26 @@ def write_iter_metrics(
         record["snr"] = snr
     if delta_U is not None:
         record["delta_U"] = delta_U
+    for k, v in extra.items():
+        if v is not None:
+            record[k] = v
     with open(path, "a") as f:
         f.write(json.dumps(record) + "\n")
+
+
+def dump_failure(
+    run_dir: str | Path,
+    step: int,
+    model: Any,
+    payload: Dict[str, Any] | None = None,
+) -> None:
+    """Save FAIL_step{step}.pt with model state and payload for debugging."""
+    import torch
+
+    run_dir = Path(run_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    d = {"step": step, "model": model.state_dict(), **(payload or {})}
+    torch.save(d, run_dir / f"FAIL_step{step}.pt")
 
 
 def write_samples_metrics(

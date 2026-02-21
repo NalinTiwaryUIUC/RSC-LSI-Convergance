@@ -14,28 +14,51 @@ from run.chain import run_chain
 from run.persistence import load_run_config
 
 
+def _make_config_and_loaders(data_dir: str):
+    config = RunConfig(
+        n_train=64,
+        probe_size=16,
+        width_multiplier=0.5,
+        h=1e-5,
+        T=10,
+        B=2,
+        S=2,
+        pretrain_steps=0,
+        data_dir=data_dir,
+    )
+    train_loader = get_train_loader(
+        config.n_train, batch_size=config.n_train, data_dir=data_dir, root="./data"
+    )
+    probe_loader = get_probe_loader(config.probe_size, data_dir=data_dir, root="./data")
+    return config, train_loader, probe_loader
+
+
+def _assert_chain_outputs(self, run_dir: Path, config: RunConfig):
+    self.assertTrue((run_dir / "run_config.yaml").exists())
+    self.assertTrue((run_dir / "iter_metrics.jsonl").exists())
+    self.assertTrue((run_dir / "samples_metrics.npz").exists())
+    loaded = load_run_config(run_dir)
+    self.assertEqual(loaded.T, 10)
+    self.assertEqual(loaded.B, 2)
+    self.assertEqual(loaded.h, 1e-5)
+    with open(run_dir / "iter_metrics.jsonl") as f:
+        lines = [json.loads(l) for l in f]
+    self.assertGreater(len(lines), 0)
+    first = lines[0]
+    for key in ("U_train", "grad_norm", "theta_norm", "f_nll", "f_margin", "snr"):
+        self.assertIn(key, first)
+        self.assertTrue(np.isfinite(first[key]))
+    data = np.load(run_dir / "samples_metrics.npz")
+    f_nll = data["f_nll"]
+    self.assertTrue(np.all(np.isfinite(f_nll)))
+
+
 class TestChainPersistence(unittest.TestCase):
     def test_chain_produces_files(self):
         """Short run produces run_config.yaml, iter_metrics.jsonl, samples_metrics.npz."""
         data_dir = tempfile.mkdtemp(prefix="lsi_chain_test_")
         run_dir = Path(data_dir) / "run"
-        config = RunConfig(
-            n_train=64,
-            probe_size=16,
-            width_multiplier=0.5,
-            h=1e-5,
-            T=10,
-            B=2,
-            S=2,
-            pretrain_steps=0,
-            data_dir=data_dir,
-        )
-        train_loader = get_train_loader(
-            config.n_train, batch_size=config.n_train, data_dir=data_dir, root="./data"
-        )
-        probe_loader = get_probe_loader(
-            config.probe_size, data_dir=data_dir, root="./data"
-        )
+        config, train_loader, probe_loader = _make_config_and_loaders(data_dir)
         run_chain(config, chain_id=0, run_dir=run_dir, train_loader=train_loader, probe_loader=probe_loader)
         self.assertTrue((run_dir / "run_config.yaml").exists())
         self.assertTrue((run_dir / "iter_metrics.jsonl").exists())
@@ -80,3 +103,33 @@ class TestChainPersistence(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(f_nll)))
         self.assertTrue(np.all(f_nll >= 0.0), msg="f_nll (CE) should be non-negative")
         self.assertTrue(np.all(f_nll < 1e3), msg="f_nll should not explode")
+
+    def test_chain_bn_mode_eval(self):
+        """Chain with bn_mode=eval produces valid outputs."""
+        data_dir = tempfile.mkdtemp(prefix="lsi_chain_bn_eval_")
+        run_dir = Path(data_dir) / "run"
+        config, train_loader, probe_loader = _make_config_and_loaders(data_dir)
+        config.bn_mode = "eval"
+        run_chain(config, chain_id=0, run_dir=run_dir, train_loader=train_loader, probe_loader=probe_loader)
+        _assert_chain_outputs(self, run_dir, config)
+
+    def test_chain_bn_mode_batchstat_frozen(self):
+        """Chain with bn_mode=batchstat_frozen produces valid outputs."""
+        data_dir = tempfile.mkdtemp(prefix="lsi_chain_bn_batch_")
+        run_dir = Path(data_dir) / "run"
+        config, train_loader, probe_loader = _make_config_and_loaders(data_dir)
+        config.bn_mode = "batchstat_frozen"
+        run_chain(config, chain_id=0, run_dir=run_dir, train_loader=train_loader, probe_loader=probe_loader)
+        _assert_chain_outputs(self, run_dir, config)
+
+    def test_chain_has_diagnostic_metrics(self):
+        """First iter_metrics line contains diagnostic keys (theta_max_abs, finite_*, drift_step_norm)."""
+        data_dir = tempfile.mkdtemp(prefix="lsi_chain_diag_")
+        run_dir = Path(data_dir) / "run"
+        config, train_loader, probe_loader = _make_config_and_loaders(data_dir)
+        config.log_every = 1  # log every step so first line has diagnostics
+        run_chain(config, chain_id=0, run_dir=run_dir, train_loader=train_loader, probe_loader=probe_loader)
+        with open(run_dir / "iter_metrics.jsonl") as f:
+            first = json.loads(f.readline())
+        for key in ("theta_max_abs", "finite_loss", "finite_params", "drift_step_norm"):
+            self.assertIn(key, first, msg=f"Missing diagnostic key {key}")

@@ -27,6 +27,7 @@ WIDTH=${1:-1}
 H=${2:-1e-5}
 CHAIN=${3:-0}      # 0, 1, 2, or 3
 N_TRAIN=${4:-1024}
+BN_MODE=${BN_MODE:-}   # Optional: eval | batchstat_frozen (default from RunConfig if unset)
 
 # Project root: use SLURM submission dir (you must run sbatch from the project directory)
 # Override with RSC_CONV_DIR if submitting from elsewhere
@@ -87,6 +88,10 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "=== Starting ULA chain ==="
+BN_ARGS=""
+if [ -n "$BN_MODE" ]; then
+    BN_ARGS="--bn-mode $BN_MODE"
+fi
 python3 scripts/run_single_chain.py \
     --width "$WIDTH" \
     --h "$H" \
@@ -96,7 +101,8 @@ python3 scripts/run_single_chain.py \
     --pretrain-lr 0.02 \
     --data_dir experiments/data \
     --runs_dir experiments/runs \
-    --root ./data
+    --root ./data \
+    $BN_ARGS
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then

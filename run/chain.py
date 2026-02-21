@@ -20,7 +20,15 @@ from probes import (
     get_or_create_logit_projection,
     get_or_create_param_projections,
 )
-from run.persistence import write_iter_metrics, write_run_config, write_samples_metrics
+from run.diagnostics import (
+    bn_buffer_stats,
+    grad_vector_stats,
+    param_vector_stats,
+    probe_metrics,
+    register_activation_hooks,
+    basic_block_predicate,
+)
+from run.persistence import dump_failure, write_iter_metrics, write_run_config, write_samples_metrics
 from ula.step import ula_step
 
 
@@ -110,7 +118,14 @@ def run_chain(
         )
 
     theta0_flat = flatten_params(model).clone().detach()  # reference for probes
-    model.eval()  # ULA sampling: BN uses running stats (no updates)
+    if config.bn_mode == "eval":
+        model.eval()
+    elif config.bn_mode == "batchstat_frozen":
+        from run.bn_mode import set_bn_batchstats_freeze_buffers
+
+        set_bn_batchstats_freeze_buffers(model)
+    else:
+        raise ValueError(f"Unknown bn_mode: {config.bn_mode}")
 
     # Projections (fixed across chain) — move to device once
     v1, v2 = get_or_create_param_projections(
@@ -137,78 +152,137 @@ def run_chain(
     T, B, S, G = config.T, config.B, config.S, config.grad_norm_stride
     log_U_every = config.log_every if log_U_every is None else log_U_every
     U_prev: float | None = None
-    for step in range(1, T + 1):
-        gen = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + step)
-        out = ula_step(
-            model,
-            train_data,
-            config.alpha,
-            config.h,
-            device,
-            noise_scale=config.noise_scale,
-            return_U=(step % log_U_every == 0 or step == 1),
-            generator=gen,
-        )
-        if step % config.log_every == 0 or step == 1:
-            vals = evaluate_probes(
-                model, probe_data, theta0_flat, v1, v2, logit_proj, device
+    act_logger, act_hooks = register_activation_hooks(model, basic_block_predicate)
+    try:
+        for step in range(1, T + 1):
+            gen = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + step)
+            out = ula_step(
+                model,
+                train_data,
+                config.alpha,
+                config.h,
+                device,
+                noise_scale=config.noise_scale,
+                return_U=(step % log_U_every == 0 or step == 1),
+                generator=gen,
             )
-            U_now = out.get("U")
-            grad_n = out.get("grad_norm")
-            # SNR = (h * ||grad||) / (sqrt(2*h*d) * noise_scale); diagnose drift vs noise
-            snr_val = None
-            if grad_n is not None and d > 0 and config.noise_scale > 0:
-                noise_std = math.sqrt(2.0 * config.h * d) * config.noise_scale
-                if noise_std > 0:
-                    snr_val = (config.h * grad_n) / noise_std
-            delta_U_val = None
-            if U_prev is not None and U_now is not None:
-                delta_U_val = U_now - U_prev
-            U_prev = U_now
-
-            write_iter_metrics(
-                step=step,
-                grad_evals=step,
-                run_dir=run_dir,
-                U_train=U_now,
-                grad_norm=grad_n,
-                theta_norm=out.get("theta_norm"),
-                f_nll=vals.get("f_nll"),
-                f_margin=vals.get("f_margin"),
-                snr=snr_val,
-                delta_U=delta_U_val,
-            )
-
-        if config.progress_print_every > 0 and step % config.progress_print_every == 0:
-            pct = 100 * step / T
-            parts = [f"chain {chain_id} step {step}/{T} ({pct:.1f}%)"]
-            if "U" in out:
-                parts.append(f"U={out['U']:.1f}")
-            if "grad_norm" in out:
-                parts.append(f"||∇U||={out['grad_norm']:.1f}")
-            if "theta_norm" in out:
-                parts.append(f"||θ||={out['theta_norm']:.0f}")
             if step % config.log_every == 0 or step == 1:
-                parts.append(f"f_nll={vals.get('f_nll', float('nan')):.3f}")
-            print(" ".join(parts))
+                vals = evaluate_probes(
+                    model, probe_data, theta0_flat, v1, v2, logit_proj, device
+                )
+                U_now = out.get("U")
+                grad_n = out.get("grad_norm")
+                # SNR = (h * ||grad||) / (sqrt(2*h*d) * noise_scale); diagnose drift vs noise
+                snr_val = None
+                if grad_n is not None and d > 0 and config.noise_scale > 0:
+                    noise_std = math.sqrt(2.0 * config.h * d) * config.noise_scale
+                    if noise_std > 0:
+                        snr_val = (config.h * grad_n) / noise_std
+                delta_U_val = None
+                if U_prev is not None and U_now is not None:
+                    delta_U_val = U_now - U_prev
+                U_prev = U_now
 
-        if step % S == 0 and step > B:
-            steps_saved.append(step)
-            grad_evals_saved.append(step)
-            vals = evaluate_probes(
-                model, probe_data, theta0_flat, v1, v2, logit_proj, device
-            )
-            for k, v in vals.items():
-                f_values[k].append(v)
-            saved_count += 1
-            # Every G-th saved sample: compute grad norms for selected probes
-            if saved_count % G == 0:
-                for pname in PROBES_FOR_GRAD_NORM:
-                    f_scalar = get_probe_value_for_grad(
-                        model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device
+                # Diagnostics: param/grad stats, probe stability (model has grads after ula_step)
+                params = list(model.parameters())
+                theta_n, theta_max, finite_params, nan_params = param_vector_stats(params)
+                grad_norm_d, grad_max, finite_grad, nan_grads = grad_vector_stats(params)
+                pm = probe_metrics(model, x_probe, y_probe)
+                finite_loss = U_now is not None and bool(torch.isfinite(torch.tensor(U_now)))
+
+                # Failure guard: dump and return on first non-finite
+                if not (finite_loss and finite_params and finite_grad):
+                    dump_failure(run_dir, step, model, {
+                        "h": config.h, "alpha": config.alpha, "noise_scale": config.noise_scale,
+                        "U_train": U_now, "finite_loss": finite_loss, "finite_params": finite_params,
+                        "finite_grad": finite_grad, "nan_count_params": nan_params, "nan_count_grads": nan_grads,
+                    })
+                    write_iter_metrics(
+                        step=step, grad_evals=step, run_dir=run_dir,
+                        U_train=U_now, grad_norm=grad_n, theta_norm=out.get("theta_norm"),
+                        f_nll=vals.get("f_nll"), f_margin=vals.get("f_margin"), snr=snr_val, delta_U=delta_U_val,
+                        finite_loss=finite_loss, finite_params=finite_params, finite_grad=finite_grad,
+                        nan_count_params=nan_params, nan_count_grads=nan_grads,
                     )
-                    gs = compute_grad_norm_sq(f_scalar, model.parameters())
-                    grad_norm_sq[pname].append(gs)
+                    write_samples_metrics(
+                        run_dir, steps_saved, grad_evals_saved, f_values, grad_norm_sq,
+                    )
+                    return
+
+                extra: Dict[str, Any] = {
+                    "theta_max_abs": theta_max,
+                    "finite_params": finite_params,
+                    "finite_grad": finite_grad,
+                    "finite_loss": finite_loss,
+                    "nan_count_params": nan_params,
+                    "nan_count_grads": nan_grads,
+                    "gradU_max_abs": grad_max,
+                    "logit_max_abs": pm["logit_max_abs"],
+                    "logsumexp_max": pm["logsumexp_max"],
+                    "pmax_mean": pm["pmax_mean"],
+                    "nll_probe": pm["nll_probe"],
+                    "margin_probe": pm["margin_probe"],
+                    "logits_finite": pm["logits_finite"],
+                    "drift_step_norm": out.get("drift_step_norm"),
+                    "noise_step_norm": out.get("noise_step_norm"),
+                    "delta_theta_norm": out.get("delta_theta_norm"),
+                }
+                if step % 500 == 0:
+                    bn_st = bn_buffer_stats(model)
+                    extra["bn_runmean_maxabs"] = bn_st["bn_runmean_maxabs"]
+                    extra["bn_runvar_maxabs"] = bn_st["bn_runvar_maxabs"]
+                    extra["bn_buffers_finite"] = bn_st["bn_buffers_finite"]
+                if step % 200 == 0 and act_logger.stats:
+                    # Flatten activation stats for JSON (take max act_max_abs across blocks)
+                    act_max = max(s.get("act_max_abs", 0.0) for s in act_logger.stats.values())
+                    extra["act_max_abs"] = act_max
+                write_iter_metrics(
+                    step=step,
+                    grad_evals=step,
+                    run_dir=run_dir,
+                    U_train=U_now,
+                    grad_norm=grad_n,
+                    theta_norm=out.get("theta_norm"),
+                    f_nll=vals.get("f_nll"),
+                    f_margin=vals.get("f_margin"),
+                    snr=snr_val,
+                    delta_U=delta_U_val,
+                    **extra,
+                )
+
+            if config.progress_print_every > 0 and step % config.progress_print_every == 0:
+                pct = 100 * step / T
+                parts = [f"chain {chain_id} step {step}/{T} ({pct:.1f}%)"]
+                if "U" in out:
+                    parts.append(f"U={out['U']:.1f}")
+                if "grad_norm" in out:
+                    parts.append(f"||∇U||={out['grad_norm']:.1f}")
+                if "theta_norm" in out:
+                    parts.append(f"||θ||={out['theta_norm']:.0f}")
+                if step % config.log_every == 0 or step == 1:
+                    parts.append(f"f_nll={vals.get('f_nll', float('nan')):.3f}")
+                print(" ".join(parts))
+
+            if step % S == 0 and step > B:
+                steps_saved.append(step)
+                grad_evals_saved.append(step)
+                vals = evaluate_probes(
+                    model, probe_data, theta0_flat, v1, v2, logit_proj, device
+                )
+                for k, v in vals.items():
+                    f_values[k].append(v)
+                saved_count += 1
+                # Every G-th saved sample: compute grad norms for selected probes
+                if saved_count % G == 0:
+                    for pname in PROBES_FOR_GRAD_NORM:
+                        f_scalar = get_probe_value_for_grad(
+                            model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device
+                        )
+                        gs = compute_grad_norm_sq(f_scalar, model.parameters())
+                        grad_norm_sq[pname].append(gs)
+    finally:
+        for h in act_hooks:
+            h.remove()
 
     write_samples_metrics(
         run_dir,

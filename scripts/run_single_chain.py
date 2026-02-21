@@ -33,6 +33,8 @@ def main() -> None:
     p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA (ignored if --pretrain-path)")
     p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
+    p.add_argument("--bn-mode", type=str, default=_DEFAULTS.bn_mode, choices=["eval", "batchstat_frozen"],
+                   help="BN mode for ULA sampling: eval=frozen running stats, batchstat_frozen=batch stats+frozen buffers")
     p.add_argument("--data_dir", type=str, default=_DEFAULTS.data_dir, help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
@@ -65,6 +67,7 @@ def main() -> None:
         chain_seed=args.seed + args.chain * 1000,
         dataset_seed=args.seed,
         data_dir=args.data_dir,
+        bn_mode=args.bn_mode,
     )
     w_str = int(args.width) if args.width == int(args.width) else args.width
     run_name = f"w{w_str}_n{args.n_train}_h{args.h}_chain{args.chain}"

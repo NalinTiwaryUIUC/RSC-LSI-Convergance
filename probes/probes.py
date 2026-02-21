@@ -13,14 +13,14 @@ from models.params import flatten_params
 
 
 def _mean_ce_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    model.eval()
+    # Mode set by caller
     with torch.no_grad():
         logits = model(x)
     return F.cross_entropy(logits, y, reduction="mean")
 
 
 def _mean_margin_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    model.eval()
+    # Mode set by caller
     with torch.no_grad():
         logits = model(x)
     # logit[true] - max over other classes
@@ -34,7 +34,7 @@ def _mean_margin_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) ->
 
 
 def _logits_flatten(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
-    model.eval()
+    # Mode set by caller
     with torch.no_grad():
         logits = model(x)
     return logits.reshape(-1)
@@ -68,7 +68,7 @@ def evaluate_probes(
     out = {}
 
     # f_nll: mean CE (need grad for LSI later; here just value)
-    model.eval()
+    # Mode set by caller
     with torch.no_grad():
         logits = model(x)
         out["f_nll"] = F.cross_entropy(logits, y, reduction="mean").item()
@@ -125,7 +125,7 @@ def get_probe_value_for_grad(
     v1, v2 = v1.to(device), v2.to(device)
     logit_proj = logit_proj.to(device)
 
-    model.eval()  # Match evaluate_probes; gradients flow through eval (BN uses running stats)
+    # Mode set by caller
     theta_flat = _theta_flat_with_grad(model, device)
     diff = theta_flat - theta0_flat
 

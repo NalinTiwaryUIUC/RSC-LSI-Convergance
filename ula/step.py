@@ -31,9 +31,12 @@ def ula_step(
 
     grads = torch.cat([p.grad.view(-1) for p in model.parameters()])
     noise_std = (2.0 * h) ** 0.5 * noise_scale
-    theta_new = theta_prev - h * grads + noise_std * torch.randn(
+    drift = -h * grads
+    noise = noise_std * torch.randn(
         theta_prev.shape, device=device, dtype=theta_prev.dtype, generator=generator
     )
+    delta = drift + noise
+    theta_new = theta_prev + delta
     unflatten_like(theta_new, model)
 
     out: dict[str, Any] = {}
@@ -43,4 +46,7 @@ def ula_step(
         theta_norm = theta_new.norm().item()
         out["grad_norm"] = grad_norm
         out["theta_norm"] = theta_norm
+        out["drift_step_norm"] = drift.norm().item()
+        out["noise_step_norm"] = noise.norm().item()
+        out["delta_theta_norm"] = delta.norm().item()
     return out

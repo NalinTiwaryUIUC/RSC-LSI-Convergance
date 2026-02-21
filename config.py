@@ -60,6 +60,9 @@ class RunConfig:
     # Probes / LSI
     grad_norm_stride: int = 5  # compute grad norms every G saved samples
 
+    # BN mode for ULA sampling: "eval" (frozen running stats) | "batchstat_frozen" (batch stats, frozen buffers)
+    bn_mode: str = "batchstat_frozen"
+
     # Seeds (for reproducibility)
     dataset_seed: int = 42
     chain_seed: int = 0

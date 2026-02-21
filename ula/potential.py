@@ -21,7 +21,7 @@ def compute_U(
     train_data: either DataLoader (yields single batch) or (x, y) tensors already on device.
     Pass (x, y) pre-loaded on GPU to avoid host-to-device transfer every step.
     """
-    model.eval()  # ULA sampling: BN uses running stats, no updates; U(θ) depends only on θ
+    # BN mode set by caller (run_chain); do not override
     if isinstance(train_data, tuple):
         x, y = train_data
     else:
