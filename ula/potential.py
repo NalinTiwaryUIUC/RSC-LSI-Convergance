@@ -10,9 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.params import flatten_params
-
-
 def compute_U(
     model: nn.Module,
     train_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
@@ -32,6 +29,6 @@ def compute_U(
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     logits = model(x)
     total_ce = F.cross_entropy(logits, y, reduction="mean")
-    flat = flatten_params(model)
-    reg = (alpha / 2.0) * (flat @ flat)
+    # Use sum of squared params (differentiable) — not flatten_params which uses p.data
+    reg = (alpha / 2.0) * sum((p * p).sum() for p in model.parameters())
     return total_ce + reg

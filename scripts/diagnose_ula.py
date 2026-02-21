@@ -101,6 +101,7 @@ def main() -> None:
     theta_sq = (theta_norm ** 2)
 
     # Full gradient: ∇U = ∇NLL + αθ
+    # U = mean_CE + (α/2)||θ||²  =>  ∇U = ∇(mean_CE) + αθ
     model.zero_grad(set_to_none=True)
     U = compute_U(model, train_data, alpha, device)
     U.backward()
@@ -108,9 +109,28 @@ def main() -> None:
     grad_norm = grad_U.norm().item()
 
     prior_grad = alpha * theta  # ∇(α/2 ||θ||²) = αθ
-    grad_NLL = grad_U - prior_grad
+    grad_NLL = grad_U - prior_grad  # ∇(mean_CE) by construction
     grad_nll_norm = grad_NLL.norm().item()
     prior_grad_norm = prior_grad.norm().item()
+
+    # Sanity: grad_U = grad_NLL + prior_grad exactly
+    residual = (grad_U - (grad_NLL + prior_grad)).norm().item()
+    if residual > 1e-6:
+        print(f"WARNING: decomposition residual ||∇U - (∇NLL+αθ)|| = {residual:.2e} (should be ~0)")
+
+    # Cross-check: compute ∇(mean_CE) directly (no prior)
+    model.zero_grad(set_to_none=True)
+    if isinstance(train_data, tuple):
+        xc, yc = train_data
+    else:
+        xc, yc = next(iter(train_data))
+        xc, yc = xc.to(device), yc.to(device)
+    logits = model(xc)
+    ce_only = torch.nn.functional.cross_entropy(logits, yc, reduction="mean")
+    ce_only.backward()
+    grad_ce_direct = torch.cat([p.grad.view(-1) for p in model.parameters()])
+    grad_ce_norm = grad_ce_direct.norm().item()
+    nll_consistency = (grad_NLL - grad_ce_direct).norm().item()
 
     # SNR
     signal = h * grad_norm
@@ -142,9 +162,19 @@ def main() -> None:
     print()
     print("--- Gradient decomposition ---")
     print(f"  ||∇U||         = {grad_norm:.6f}")
-    print(f"  ||∇NLL||       = {grad_nll_norm:.6f}  (data term)")
+    print(f"  ||∇NLL||       = {grad_nll_norm:.6f}  (∇(mean_CE), data term)")
     print(f"  ||αθ||         = {prior_grad_norm:.6f}  (prior term)")
-    print(f"  prior/||∇U||   = {prior_grad_norm/grad_norm:.4f}  (prior fraction)")
+    if grad_norm > 1e-10:
+        print(f"  prior/||∇U||   = {prior_grad_norm/grad_norm:.4f}  (prior fraction)")
+    else:
+        print("  prior/||∇U||   = (∇U≈0)")
+    print(f"  ||∇U-(∇NLL+αθ)|| = {residual:.2e}  (sanity: should be ~0)")
+    print(f"  ||∇(CE)_direct|| = {grad_ce_norm:.6f}  (cross-check: ∇(mean_CE) alone)")
+    print(f"  ||∇NLL-∇(CE)_direct|| = {nll_consistency:.2e}  (should be ~0)")
+    if grad_norm < 0.01 * min(grad_nll_norm, prior_grad_norm) and min(grad_nll_norm, prior_grad_norm) > 1e-6:
+        print()
+        print("  *** Strong cancellation: ||∇U|| << ||∇NLL|| and ||αθ||. Data and prior gradients")
+        print("      oppose each other. This can occur near a mode; verify cross-checks above.")
     print()
     print("--- Drift vs restorative ---")
     print(f"  SNR            = {snr:.2e}  (signal/noise; <1e-3 => random walk)")
