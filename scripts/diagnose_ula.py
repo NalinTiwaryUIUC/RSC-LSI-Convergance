@@ -4,8 +4,12 @@ and recommend alpha/noise_scale to achieve equilibrium.
 
 Usage:
   python scripts/diagnose_ula.py
-  python scripts/diagnose_ula.py --n_train 1024 --width 1 --alpha 0.01 --noise-scale 1.0
-  python scripts/diagnose_ula.py --pretrain-path experiments/checkpoints/pretrain_w1_n1024.pt
+
+  # With all hyperparams explicit (quick run):
+  python scripts/diagnose_ula.py --n_train 128 --width 0.5 --h 0.0001 --alpha 0.01 --noise-scale 1.0 --pretrain-steps 100 --data_dir experiments/data --root ./data
+
+  # With pretrain checkpoint:
+  python scripts/diagnose_ula.py --pretrain-path experiments/checkpoints/pretrain_w1_n1024.pt --n_train 1024 --width 1 --h 0.0001 --alpha 0.01 --noise-scale 1.0 --pretrain-steps 0 --data_dir experiments/data --root ./data
 
 Outputs:
   - Gradient decomposition (NLL vs prior)
@@ -34,20 +38,30 @@ def main() -> None:
     p = argparse.ArgumentParser(description="ULA drift diagnostic")
     p.add_argument("--n_train", type=int, default=1024)
     p.add_argument("--width", type=float, default=1.0)
-    p.add_argument("--alpha", type=float, default=None, help="Use config default if not set")
-    p.add_argument("--noise-scale", type=float, default=None, help="Use config default if not set")
+    p.add_argument("--h", type=float, default=None, help="Step size; config default if not set")
+    p.add_argument("--alpha", type=float, default=None, help="L2 prior strength; config default if not set")
+    p.add_argument("--noise-scale", type=float, default=None, help="Langevin noise scale; config default if not set")
     p.add_argument("--pretrain-steps", type=int, default=2000)
+    p.add_argument("--pretrain-lr", type=float, default=None, help="SGD lr for pretrain; config default if not set")
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips pretrain")
+    p.add_argument("--data_dir", type=str, default=None)
+    p.add_argument("--root", type=str, default="./data")
+    p.add_argument("--seed", type=int, default=None, help="Dataset seed; config default if not set")
     args = p.parse_args()
 
     ensure_directories()
     device = get_device()
     use_gpu = device.type == "cuda"
+    _cfg = RunConfig()
     config = RunConfig(
         n_train=args.n_train,
         probe_size=512,
         width_multiplier=args.width,
+        h=args.h if args.h is not None else _cfg.h,
         pretrain_steps=args.pretrain_steps,
+        pretrain_lr=args.pretrain_lr if args.pretrain_lr is not None else _cfg.pretrain_lr,
+        dataset_seed=args.seed if args.seed is not None else _cfg.dataset_seed,
+        data_dir=args.data_dir if args.data_dir is not None else _cfg.data_dir,
     )
     alpha = args.alpha if args.alpha is not None else config.alpha
     noise_scale = args.noise_scale if args.noise_scale is not None else config.noise_scale
@@ -58,7 +72,7 @@ def main() -> None:
         batch_size=config.n_train,
         dataset_seed=config.dataset_seed,
         data_dir=config.data_dir,
-        root="./data",
+        root=args.root,
         pin_memory=use_gpu,
     )
     x_train, y_train = next(iter(train_loader))
