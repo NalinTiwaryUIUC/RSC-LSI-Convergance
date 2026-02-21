@@ -30,14 +30,15 @@ def main() -> None:
     p.add_argument("--T", type=int, default=_DEFAULTS.T, help="Total steps")
     p.add_argument("--B", type=int, default=_DEFAULTS.B, help="Burn-in steps")
     p.add_argument("--S", type=int, default=_DEFAULTS.S, help="Save stride")
-    p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA")
+    p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA (ignored if --pretrain-path)")
     p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
+    p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
     p.add_argument("--data_dir", type=str, default=_DEFAULTS.data_dir, help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
     p.add_argument("--seed", type=int, default=_DEFAULTS.dataset_seed, help="Dataset seed")
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
-    p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (<1 = higher SNR)")
+    p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     args = p.parse_args()
 
@@ -84,9 +85,11 @@ def main() -> None:
         root=args.root,
         pin_memory=use_gpu,
     )
+    pretrain_path = Path(args.pretrain_path) if args.pretrain_path else None
     run_chain(
         config, chain_id=args.chain, run_dir=run_dir,
         train_loader=train_loader, probe_loader=probe_loader, device=device,
+        pretrain_path=pretrain_path,
     )
     print("Done:", run_dir)
 

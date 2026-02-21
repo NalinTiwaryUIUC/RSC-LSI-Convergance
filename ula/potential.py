@@ -1,5 +1,5 @@
 """
-Potential U(theta) = sum CE(theta; x_i, y_i) + (alpha/2) * ||theta||^2
+Potential U(theta) = mean CE(theta; x_i, y_i) + (alpha/2) * ||theta||^2
 Full-batch on training subset.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ def compute_U(
         x, y = next(iter(train_data))
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     logits = model(x)
-    total_ce = F.cross_entropy(logits, y, reduction="sum")
+    total_ce = F.cross_entropy(logits, y, reduction="mean")
     flat = flatten_params(model)
     reg = (alpha / 2.0) * (flat @ flat)
     return total_ce + reg

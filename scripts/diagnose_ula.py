@@ -4,7 +4,8 @@ and recommend alpha/noise_scale to achieve equilibrium.
 
 Usage:
   python scripts/diagnose_ula.py
-  python scripts/diagnose_ula.py --n_train 1024 --width 1 --alpha 0.05 --noise-scale 0.002
+  python scripts/diagnose_ula.py --n_train 1024 --width 1 --alpha 0.01 --noise-scale 1.0
+  python scripts/diagnose_ula.py --pretrain-path experiments/checkpoints/pretrain_w1_n1024.pt
 
 Outputs:
   - Gradient decomposition (NLL vs prior)
@@ -36,6 +37,7 @@ def main() -> None:
     p.add_argument("--alpha", type=float, default=None, help="Use config default if not set")
     p.add_argument("--noise-scale", type=float, default=None, help="Use config default if not set")
     p.add_argument("--pretrain-steps", type=int, default=2000)
+    p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips pretrain")
     args = p.parse_args()
 
     ensure_directories()
@@ -65,11 +67,12 @@ def main() -> None:
     train_data = (x_train, y_train)
 
     model = create_model(width_multiplier=config.width_multiplier).to(device)
-    theta0 = flatten_params(model).clone().detach()
-    d = theta0.numel()
+    d = flatten_params(model).numel()
 
-    # Pretrain (match chain init)
-    if config.pretrain_steps > 0:
+    if args.pretrain_path:
+        ckpt = torch.load(args.pretrain_path, map_location=device, weights_only=True)
+        model.load_state_dict(ckpt["state_dict"], strict=True)
+    elif config.pretrain_steps > 0:
         optimizer = torch.optim.SGD(model.parameters(), lr=config.pretrain_lr, momentum=0.9)
         model.train()
         for _ in range(config.pretrain_steps):

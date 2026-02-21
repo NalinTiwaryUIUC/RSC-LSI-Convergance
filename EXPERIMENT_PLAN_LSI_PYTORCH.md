@@ -118,9 +118,11 @@ Record parameter count:
 Define potential (negative log posterior up to constant):
 
 \[
-U(\theta) = \sum_{(x_i,y_i)\in \mathcal D_{\text{train}}} \text{CE}(\theta;x_i,y_i)
+U(\theta) = \frac{1}{n}\sum_{(x_i,y_i)\in \mathcal D_{\text{train}}} \text{CE}(\theta;x_i,y_i)
 + \frac{\alpha}{2}\|\theta\|^2
 \]
+
+(Mean CE over training subset; prior unchanged.)
 
 Use:
 - Prior precision: `α = 1e-2` (main width sweep)
@@ -137,8 +139,10 @@ Use:
 For step size `h`:
 
 ```python
-theta = theta - h * grad_U(theta) + (2*h)**0.5 * torch.randn_like(theta)
+theta = theta - h * grad_U(theta) + (2*h)**0.5 * noise_scale * torch.randn_like(theta)
 ```
+
+With `noise_scale=1.0` (default) this is standard ULA. Use `--noise-scale` to adjust.
 
 Implementation detail in PyTorch:
 - Treat model parameters as the state.

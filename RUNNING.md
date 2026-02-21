@@ -17,25 +17,45 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 
 - **Widths**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
-- **Noise scale**: Default 0.03 (reduces Langevin noise so SNR is higher; if U drifts up monotonically, try 0.02 or 0.01).
-- **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode.
+- **Noise scale**: Default 1.0 (standard ULA). Use `--noise-scale` to override; run `scripts/diagnose_ula.py` to tune for balance.
+- **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train) and pass `--pretrain-path` to run and diagnose.
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.
+
+### Optional: Pretrain once per (width, n_train) for standardized init
+
+Use a fixed random seed so all chains start from the same pretrained checkpoint:
+
+```bash
+# Pretrain for width 1, n_train 1024 (fixed seed 42)
+python3 scripts/pretrain.py --width 1 --n_train 1024 --pretrain-steps 2000
+# Writes experiments/checkpoints/pretrain_w1_n1024.pt
+
+# For other widths:
+python3 scripts/pretrain.py --width 0.1 --n_train 1024
+python3 scripts/pretrain.py --width 0.01 --n_train 1024
+```
+
+Then pass `--pretrain-path` to run and diagnose (see Option A/B below).
 
 ### Option A: Run one chain at a time (local or single job, with SGD warm-up)
 
 ```bash
 # Example: width 1, h=1e-5, 4 chains, n_train=1024 (plan defaults)
-# Add a short full-batch SGD warm-up before ULA via --pretrain-steps / --pretrain-lr.
+# With shared pretrain (run pretrain.py first):
+PRETRAIN=experiments/checkpoints/pretrain_w1_n1024.pt
 for chain in 0 1 2 3; do
   python3 scripts/run_single_chain.py \
-    --width 1 \
-    --h 1e-5 \
-    --chain $chain \
-    --n_train 1024 \
-    --pretrain-steps 1000 \
-    --pretrain-lr 0.1
+    --width 1 --h 1e-5 --chain $chain --n_train 1024 \
+    --pretrain-path "$PRETRAIN"
+done
+
+# Or without shared pretrain (per-chain SGD warm-up):
+for chain in 0 1 2 3; do
+  python3 scripts/run_single_chain.py \
+    --width 1 --h 1e-5 --chain $chain --n_train 1024 \
+    --pretrain-steps 2000 --pretrain-lr 0.1
 done
 ```
 

@@ -57,6 +57,7 @@ def run_chain(
     probe_loader: torch.utils.data.DataLoader,
     device: torch.device | None = None,
     log_U_every: int | None = None,
+    pretrain_path: str | Path | None = None,
 ) -> None:
     """
     Run one ULA chain. Writes run_config.yaml, iter_metrics.jsonl, samples_metrics.npz to run_dir.
@@ -87,24 +88,26 @@ def run_chain(
         width_multiplier=config.width_multiplier,
         num_classes=config.num_classes,
     ).to(device)
-    theta0 = flatten_params(model).clone().detach()
-    d = theta0.numel()
+    d = flatten_params(model).numel()
     config.param_count = d
     write_run_config(config, run_dir)
 
-    sigma_init = config.sigma_init_scale * (theta0.std().item() + 1e-8)
-    g = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000)
-    noise = torch.randn(d, device=device, generator=g) * sigma_init
-    unflatten_like(theta0 + noise, model)
-
-    # Optional short pretraining to move closer to a good region before sampling
-    _pretrain_model(
-        model,
-        train_data,
-        steps=config.pretrain_steps,
-        lr=config.pretrain_lr,
-        device=device,
-    )
+    if pretrain_path is not None:
+        ckpt = torch.load(pretrain_path, map_location=device, weights_only=True)
+        model.load_state_dict(ckpt["state_dict"], strict=True)
+    else:
+        theta0 = flatten_params(model).clone().detach()
+        sigma_init = config.sigma_init_scale * (theta0.std().item() + 1e-8)
+        g = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000)
+        noise = torch.randn(d, device=device, generator=g) * sigma_init
+        unflatten_like(theta0 + noise, model)
+        _pretrain_model(
+            model,
+            train_data,
+            steps=config.pretrain_steps,
+            lr=config.pretrain_lr,
+            device=device,
+        )
 
     theta0_flat = flatten_params(model).clone().detach()  # reference for probes
 

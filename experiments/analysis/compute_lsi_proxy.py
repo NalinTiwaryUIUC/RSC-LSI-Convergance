@@ -71,12 +71,17 @@ def main() -> None:
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("run_dirs", nargs="+", help="Run dirs (one per chain)")
+    p.add_argument("--exclude-chain", type=int, action="append", default=None, metavar="N",
+                   help="Exclude run dirs containing 'chainN' (e.g. --exclude-chain 2)")
     p.add_argument("--B", type=int, default=50_000)
     p.add_argument("--G", type=int, default=5)
     p.add_argument("--S", type=int, default=200)
     p.add_argument("-o", "--out", default="experiments/summaries/lsi_proxy.csv")
     args = p.parse_args()
     run_dirs = [Path(d) for d in args.run_dirs]
+    if args.exclude_chain:
+        exclude = set(args.exclude_chain)
+        run_dirs = [d for d in run_dirs if not any(f"chain{n}" in str(d) for n in exclude)]
     df = compute_lsi_proxy(
         run_dirs, args.B, args.G, args.S
     )
