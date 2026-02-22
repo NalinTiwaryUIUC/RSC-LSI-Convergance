@@ -49,6 +49,7 @@ def evaluate_probes(
     logit_proj: torch.Tensor,
     device: torch.device,
     nll_data: Union[tuple[torch.Tensor, torch.Tensor], None] = None,
+    ce_reduction: str = "mean",
 ) -> Dict[str, float]:
     """
     Evaluate all probes. Returns dict probe_name -> scalar value.
@@ -71,10 +72,10 @@ def evaluate_probes(
 
     out = {}
 
-    # f_nll, f_margin: on nll_data (train batch) so they match U_data; same reduction (sum) as U
+    # f_nll, f_margin: on nll_data (train batch) so they match U_data; same reduction as U
     with torch.no_grad():
         logits_nll = model(x_nll)
-        out["f_nll"] = F.cross_entropy(logits_nll, y_nll, reduction="sum").item()
+        out["f_nll"] = F.cross_entropy(logits_nll, y_nll, reduction=ce_reduction).item()
         n = logits_nll.size(0)
         logit_true = logits_nll[torch.arange(n, device=logits_nll.device), y_nll]
         logits_masked = logits_nll.clone()
@@ -114,10 +115,12 @@ def get_probe_value_for_grad(
     probe_name: str,
     device: torch.device,
     nll_data: Union[tuple[torch.Tensor, torch.Tensor], None] = None,
+    ce_reduction: str = "mean",
 ) -> torch.Tensor:
     """
     Compute a single probe value *with* grad (for computing grad_norm_sq).
     nll_data: If provided, used for f_nll (must match U_data batch).
+    ce_reduction: Same as U (mean or sum).
     """
     if isinstance(probe_data, tuple):
         x_probe, y_probe = probe_data
@@ -136,7 +139,7 @@ def get_probe_value_for_grad(
 
     if probe_name == "f_nll":
         logits = model(x_nll)
-        return F.cross_entropy(logits, y_nll, reduction="sum")
+        return F.cross_entropy(logits, y_nll, reduction=ce_reduction)
     if probe_name == "f_margin":
         logits = model(x_nll)
         n = logits.size(0)

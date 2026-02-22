@@ -1,5 +1,6 @@
 """
-Potential U(theta) = sum CE(theta; x_i, y_i) + (alpha/2) * ||theta||^2
+Potential U(theta) = CE(theta; x_i, y_i) + (alpha/2) * ||theta||^2
+CE uses reduction "mean" or "sum" per config.
 Full-batch on training subset.
 """
 from __future__ import annotations
@@ -15,6 +16,7 @@ def compute_U(
     train_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
     alpha: float,
     device: torch.device,
+    ce_reduction: str = "mean",
 ) -> torch.Tensor:
     """
     Full-batch negative log posterior (up to constant).
@@ -28,7 +30,7 @@ def compute_U(
         x, y = next(iter(train_data))
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     logits = model(x)
-    total_ce = F.cross_entropy(logits, y, reduction="sum")
+    total_ce = F.cross_entropy(logits, y, reduction=ce_reduction)
     # Use sum of squared params (differentiable) — not flatten_params which uses p.data
     reg = (alpha / 2.0) * sum((p * p).sum() for p in model.parameters())
     return total_ce + reg

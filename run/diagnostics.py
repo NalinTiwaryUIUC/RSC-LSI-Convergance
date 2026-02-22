@@ -54,6 +54,7 @@ def probe_metrics(
     xb: torch.Tensor,
     yb: torch.Tensor,
     nll_batch: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ce_reduction: str = "mean",
 ) -> Dict[str, float | bool]:
     """logit_max_abs, logsumexp_max, pmax_mean, nll_probe, margin_probe, logits_finite.
     nll_batch: If provided, (x,y) for nll_probe and margin_probe (must match U_data batch).
@@ -66,7 +67,7 @@ def probe_metrics(
     logsumexp_max = lse.max().item()
     probs = F.softmax(logits, dim=1)
     pmax_mean = probs.max(dim=1).values.mean().item()
-    nll = F.cross_entropy(logits_nll, y_nll, reduction="sum").item()
+    nll = F.cross_entropy(logits_nll, y_nll, reduction=ce_reduction).item()
     y_logit = logits_nll.gather(1, y_nll.view(-1, 1)).squeeze(1)
     tmp = logits_nll.clone()
     tmp.scatter_(1, y_nll.view(-1, 1), float("-inf"))

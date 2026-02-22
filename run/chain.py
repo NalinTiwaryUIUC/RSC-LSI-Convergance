@@ -169,11 +169,12 @@ def run_chain(
                 noise_scale=config.noise_scale,
                 return_U=(step % log_U_every == 0 or step == 1),
                 generator=gen,
+                ce_reduction=config.ce_reduction,
             )
             if step % config.log_every == 0 or step == 1:
                 vals = evaluate_probes(
                     model, probe_data, theta0_flat, v1, v2, logit_proj, device,
-                    nll_data=train_data,
+                    nll_data=train_data, ce_reduction=config.ce_reduction,
                 )
                 U_now = out.get("U")
                 grad_n = out.get("grad_norm")
@@ -192,7 +193,7 @@ def run_chain(
                 params = list(model.parameters())
                 theta_n, theta_max, finite_params, nan_params = param_vector_stats(params)
                 grad_norm_d, grad_max, finite_grad, nan_grads = grad_vector_stats(params)
-                pm = probe_metrics(model, x_probe, y_probe, nll_batch=(x_train, y_train))
+                pm = probe_metrics(model, x_probe, y_probe, nll_batch=(x_train, y_train), ce_reduction=config.ce_reduction)
                 finite_loss = U_now is not None and bool(torch.isfinite(torch.tensor(U_now)))
 
                 # Failure guard: dump and return on first non-finite
@@ -221,13 +222,17 @@ def run_chain(
                         dist_to_ref_at_step1 = math.sqrt(f_dist_val)
                     nll_probe_at_step1 = pm["nll_probe"]
 
-                # A. U decomposition + scale sanity (U uses sum CE)
+                # A. U decomposition + scale sanity
                 theta_norm_val = out.get("theta_norm")
                 U_prior = (0.5 * config.alpha * (theta_norm_val**2)) if theta_norm_val is not None else None
                 U_data = (U_now - U_prior) if (U_now is not None and U_prior is not None) else None
-                ce_sum_train = U_data  # U = sum CE + U_prior
-                ce_mean_train = (U_data / config.n_train) if (U_data is not None and config.n_train > 0) else None
-                U_data_minus_ce = (U_data - ce_sum_train) if ce_sum_train is not None else None
+                if config.ce_reduction == "sum":
+                    ce_sum_train = U_data
+                    ce_mean_train = (U_data / config.n_train) if (U_data is not None and config.n_train > 0) else None
+                else:
+                    ce_mean_train = U_data
+                    ce_sum_train = (U_data * config.n_train) if (U_data is not None and config.n_train > 0) else None
+                U_data_minus_ce = (U_data - (ce_sum_train if config.ce_reduction == "sum" else ce_mean_train)) if U_data is not None else None
 
                 # B. Locality relative to pretrained checkpoint
                 f_dist_val = vals.get("f_dist")
@@ -337,7 +342,7 @@ def run_chain(
                 grad_evals_saved.append(step)
                 vals = evaluate_probes(
                     model, probe_data, theta0_flat, v1, v2, logit_proj, device,
-                    nll_data=train_data,
+                    nll_data=train_data, ce_reduction=config.ce_reduction,
                 )
                 for k, v in vals.items():
                     f_values[k].append(v)
@@ -347,7 +352,7 @@ def run_chain(
                     for pname in PROBES_FOR_GRAD_NORM:
                         f_scalar = get_probe_value_for_grad(
                             model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device,
-                            nll_data=train_data,
+                            nll_data=train_data, ce_reduction=config.ce_reduction,
                         )
                         gs = compute_grad_norm_sq(f_scalar, model.parameters())
                         grad_norm_sq[pname].append(gs)

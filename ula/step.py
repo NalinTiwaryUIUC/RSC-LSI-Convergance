@@ -22,11 +22,12 @@ def ula_step(
     noise_scale: float = 1.0,
     return_U: bool = False,
     generator: torch.Generator | None = None,
+    ce_reduction: str = "mean",
 ) -> dict[str, Any]:
     """Perform one ULA step. Modifies model parameters in place. Returns dict with optional U."""
     theta_prev = flatten_params(model).clone()
     model.zero_grad(set_to_none=True)
-    U = compute_U(model, train_data, alpha, device)
+    U = compute_U(model, train_data, alpha, device, ce_reduction=ce_reduction)
     U.backward()
 
     grads = torch.cat([p.grad.view(-1) for p in model.parameters()])

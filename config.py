@@ -43,6 +43,7 @@ class RunConfig:
     # ULA
     h: float = 1e-4  # larger steps for more movement
     alpha: float = 0.01  # reduced from 0.05 to lessen ∇NLL/αθ cancellation; improves SNR
+    ce_reduction: str = "sum"  # "mean" or "sum"; mean = stable at larger h, sum = matches log-posterior scale
     temperature: float = 1.0
     noise_scale: float = 1.0  # standard ULA uses 1; <1 = less noise, >1 = more diffusion
 

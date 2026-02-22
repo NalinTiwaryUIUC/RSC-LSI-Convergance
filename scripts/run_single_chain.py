@@ -43,6 +43,8 @@ def main() -> None:
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
+    p.add_argument("--ce-reduction", type=str, default=_DEFAULTS.ce_reduction, choices=["mean", "sum"],
+                   help="CE reduction in U: mean (stable at larger h) or sum")
     args = p.parse_args()
 
     ensure_directories()
@@ -58,6 +60,7 @@ def main() -> None:
         width_multiplier=args.width,
         h=args.h,
         alpha=args.alpha,
+        ce_reduction=args.ce_reduction,
         T=args.T,
         B=args.B,
         S=args.S,
