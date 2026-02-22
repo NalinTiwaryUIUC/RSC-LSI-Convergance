@@ -172,7 +172,8 @@ def run_chain(
             )
             if step % config.log_every == 0 or step == 1:
                 vals = evaluate_probes(
-                    model, probe_data, theta0_flat, v1, v2, logit_proj, device
+                    model, probe_data, theta0_flat, v1, v2, logit_proj, device,
+                    nll_data=train_data,
                 )
                 U_now = out.get("U")
                 grad_n = out.get("grad_norm")
@@ -191,7 +192,7 @@ def run_chain(
                 params = list(model.parameters())
                 theta_n, theta_max, finite_params, nan_params = param_vector_stats(params)
                 grad_norm_d, grad_max, finite_grad, nan_grads = grad_vector_stats(params)
-                pm = probe_metrics(model, x_probe, y_probe)
+                pm = probe_metrics(model, x_probe, y_probe, nll_batch=(x_train, y_train))
                 finite_loss = U_now is not None and bool(torch.isfinite(torch.tensor(U_now)))
 
                 # Failure guard: dump and return on first non-finite
@@ -335,7 +336,8 @@ def run_chain(
                 steps_saved.append(step)
                 grad_evals_saved.append(step)
                 vals = evaluate_probes(
-                    model, probe_data, theta0_flat, v1, v2, logit_proj, device
+                    model, probe_data, theta0_flat, v1, v2, logit_proj, device,
+                    nll_data=train_data,
                 )
                 for k, v in vals.items():
                     f_values[k].append(v)
@@ -344,7 +346,8 @@ def run_chain(
                 if saved_count % G == 0:
                     for pname in PROBES_FOR_GRAD_NORM:
                         f_scalar = get_probe_value_for_grad(
-                            model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device
+                            model, probe_data, theta0_flat, v1, v2, logit_proj, pname, device,
+                            nll_data=train_data,
                         )
                         gs = compute_grad_norm_sq(f_scalar, model.parameters())
                         grad_norm_sq[pname].append(gs)

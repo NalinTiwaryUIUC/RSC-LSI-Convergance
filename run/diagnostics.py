@@ -53,18 +53,23 @@ def probe_metrics(
     model: nn.Module,
     xb: torch.Tensor,
     yb: torch.Tensor,
+    nll_batch: tuple[torch.Tensor, torch.Tensor] | None = None,
 ) -> Dict[str, float | bool]:
-    """logit_max_abs, logsumexp_max, pmax_mean, nll_probe, margin_probe, logits_finite."""
+    """logit_max_abs, logsumexp_max, pmax_mean, nll_probe, margin_probe, logits_finite.
+    nll_batch: If provided, (x,y) for nll_probe and margin_probe (must match U_data batch).
+    """
+    x_nll, y_nll = nll_batch if nll_batch is not None else (xb, yb)
     logits = model(xb)
+    logits_nll = model(x_nll) if nll_batch is not None else logits
     logit_max_abs = logits.abs().max().item()
     lse = torch.logsumexp(logits, dim=1)
     logsumexp_max = lse.max().item()
     probs = F.softmax(logits, dim=1)
     pmax_mean = probs.max(dim=1).values.mean().item()
-    nll = F.cross_entropy(logits, yb, reduction="sum").item()
-    y_logit = logits.gather(1, yb.view(-1, 1)).squeeze(1)
-    tmp = logits.clone()
-    tmp.scatter_(1, yb.view(-1, 1), float("-inf"))
+    nll = F.cross_entropy(logits_nll, y_nll, reduction="sum").item()
+    y_logit = logits_nll.gather(1, y_nll.view(-1, 1)).squeeze(1)
+    tmp = logits_nll.clone()
+    tmp.scatter_(1, y_nll.view(-1, 1), float("-inf"))
     max_other = tmp.max(dim=1).values
     margin = (y_logit - max_other).mean().item()
     finite = bool(torch.isfinite(logits).all())
