@@ -14,19 +14,20 @@
 #SBATCH --error=logs/lsi_ula/lsi_ula_%j.err
 
 # Run one ULA chain. IMPORTANT: Submit from the project directory (cd /path/to/RSC_Conv first).
-# Arguments: WIDTH  H  CHAIN  N_TRAIN
-#   CHAIN = 0, 1, 2, or 3 (four chains per width/h)
+# Arguments: WIDTH  H  CHAIN  N_TRAIN  [ALPHA]
+#   CHAIN = 0, 1, 2, or 3 (four chains per width/h/alpha)
+#   ALPHA = optional, default 0.01
 # Examples:
 #   sbatch scripts/submit_chain.sh              # defaults: width=1, h=1e-5, chain=0, n_train=1024
 #   sbatch scripts/submit_chain.sh 1 1e-5 0 1024   # chain 0
-#   sbatch scripts/submit_chain.sh 1 1e-5 2 1024   # chain 2
-#   sbatch scripts/submit_chain.sh 1 1e-5 3 1024   # chain 3
+#   sbatch scripts/submit_chain.sh 0.1 5e-5 0 1024 0.1   # alpha sweep
 #   for w in 0.5 1 2 4; do for c in 0 1 2 3; do sbatch scripts/submit_chain.sh $w 1e-5 $c 1024; done; done
 
 WIDTH=${1:-1}
 H=${2:-1e-5}
 CHAIN=${3:-0}      # 0, 1, 2, or 3
 N_TRAIN=${4:-1024}
+ALPHA=${5:-0.01}   # optional, for alpha sweep
 BN_MODE=${BN_MODE:-}   # Optional: eval | batchstat_frozen (default from RunConfig if unset)
 
 # Project root: use SLURM submission dir (you must run sbatch from the project directory)
@@ -45,7 +46,7 @@ mkdir -p logs/lsi_ula
 
 echo "=== Job started at $(date) ==="
 echo "=== Job ID: $SLURM_JOB_ID ==="
-echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN ==="
+echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA ==="
 echo "=== Working directory: $PROJ_DIR ==="
 
 echo "=== GPU Information ==="
@@ -97,6 +98,7 @@ python3 scripts/run_single_chain.py \
     --h "$H" \
     --chain "$CHAIN" \
     --n_train "$N_TRAIN" \
+    --alpha "$ALPHA" \
     --pretrain-steps 2000 \
     --pretrain-lr 0.02 \
     --data_dir experiments/data \
@@ -107,7 +109,7 @@ python3 scripts/run_single_chain.py \
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
     echo "=== Chain completed successfully at $(date) ==="
-    echo "Output: experiments/runs/w${WIDTH}_n${N_TRAIN}_h${H}_chain${CHAIN}/"
+    echo "Output: experiments/runs/w${WIDTH}_n${N_TRAIN}_h${H}_a${ALPHA}_chain${CHAIN}/"
 else
     echo "=== Chain failed with exit code $EXIT_CODE at $(date) ==="
     exit $EXIT_CODE

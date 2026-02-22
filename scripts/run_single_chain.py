@@ -70,7 +70,8 @@ def main() -> None:
         bn_mode=args.bn_mode,
     )
     w_str = int(args.width) if args.width == int(args.width) else args.width
-    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_chain{args.chain}"
+    alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
+    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     train_loader = get_train_loader(

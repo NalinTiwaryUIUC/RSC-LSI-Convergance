@@ -229,14 +229,16 @@ def main():
     import argparse
     p = argparse.ArgumentParser(description="Generate h-sweep comparison report")
     p.add_argument("--base", default="experiments/runs", help="Base runs directory")
+    p.add_argument("--alpha", type=float, default=0.01, help="Alpha used in runs (for path construction)")
     p.add_argument("-o", "--out", default="experiments/summaries/h_sweep_report.md")
     args = p.parse_args()
     base = Path(args.base)
     out = Path(args.out)
 
     h_values = ["1e-06", "5e-06", "1e-05", "5e-05"]
+    alpha_str = str(args.alpha).replace("-", "m")  # match run_single_chain naming
     prefix = "w0.1_n1024_h"
-    suffix = "_chain"
+    suffix = f"_a{alpha_str}_chain"
 
     # Collect data per h
     iter_dfs = []
