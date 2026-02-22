@@ -5,7 +5,7 @@ probe_indices_file: probe_indices.json
 data_dir: experiments/data
 width_multiplier: 0.1
 num_classes: 10
-h: 1.0e-07
+h: 5.0e-10
 alpha: 0.1
 temperature: 1.0
 noise_scale: 1.0
@@ -24,6 +24,6 @@ dataset_seed: 42
 chain_seed: 42
 probe_projection_seed: 12345
 chain_id: 0
-run_dir: experiments/runs/w0.1_n1024_h1e-07_a0.1_chain0
+run_dir: experiments/runs/w0.1_n1024_h5e-10_a0.1_chain0
 param_count: 99616
 ou_radius_pred: 998.0781532525397
