@@ -30,6 +30,7 @@ def main() -> None:
     p.add_argument("--T", type=int, default=_DEFAULTS.T, help="Total steps")
     p.add_argument("--B", type=int, default=_DEFAULTS.B, help="Burn-in steps")
     p.add_argument("--S", type=int, default=_DEFAULTS.S, help="Save stride")
+    p.add_argument("--log-every", type=int, default=_DEFAULTS.log_every, help="Write iter_metrics every N steps (default 1000)")
     p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA (ignored if --pretrain-path)")
     p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
@@ -60,6 +61,7 @@ def main() -> None:
         T=args.T,
         B=args.B,
         S=args.S,
+        log_every=args.log_every,
         K=_DEFAULTS.K,
         noise_scale=args.noise_scale,
         pretrain_steps=args.pretrain_steps,
