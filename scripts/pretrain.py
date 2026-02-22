@@ -78,6 +78,15 @@ def main() -> None:
         loss.backward()
         optimizer.step()
 
+    # Final metrics on same batch (eval mode for reproducibility)
+    model.eval()
+    with torch.no_grad():
+        logits = model(x_train)
+        ce_mean = F.cross_entropy(logits, y_train, reduction="mean").item()
+        pred = logits.argmax(dim=1)
+        acc = (pred == y_train).float().mean().item() * 100
+    print(f"Pretrain done: mean CE = {ce_mean:.4f}, accuracy = {acc:.2f}% (on train batch, eval mode)")
+
     out_path = args.output
     if out_path is None:
         w_str = int(args.width) if args.width == int(args.width) else args.width
