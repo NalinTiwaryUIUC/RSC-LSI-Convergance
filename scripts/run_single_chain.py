@@ -83,6 +83,7 @@ def main() -> None:
         data_dir=config.data_dir,
         root=args.root,
         pin_memory=use_gpu,
+        eval_transform=True,
     )
     probe_loader = get_probe_loader(
         config.probe_size,

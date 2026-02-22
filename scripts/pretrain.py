@@ -48,6 +48,7 @@ def main() -> None:
     p.add_argument("--data_dir", type=str, default="experiments/data")
     p.add_argument("--root", type=str, default="./data")
     p.add_argument("--seed", type=int, default=PRETRAIN_SEED, help="Fixed seed for reproducibility")
+    p.add_argument("--verify", action="store_true", help="Run 1: reload from disk and verify ce/acc on same batch")
     args = p.parse_args()
 
     set_pretrain_seed(args.seed)
@@ -62,6 +63,7 @@ def main() -> None:
         data_dir=args.data_dir,
         root=args.root,
         pin_memory=use_gpu,
+        eval_transform=True,
     )
     x_train, y_train = next(iter(train_loader))
     x_train = x_train.to(device, non_blocking=True)
@@ -98,6 +100,21 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"state_dict": model.state_dict(), "width": args.width, "n_train": args.n_train}, out_path)
     print("Wrote", out_path)
+
+    # Run 1: Reload verify — re-instantiate, load from disk, eval on same batch
+    if args.verify:
+        batch_path = out_path.with_suffix(".batch.pt")
+        torch.save({"x": x_train.cpu(), "y": y_train.cpu()}, batch_path)
+        print("Saved batch to", batch_path)
+        fresh = create_model(width_multiplier=args.width).to(device)
+        loaded = torch.load(out_path, map_location=device, weights_only=True)
+        fresh.load_state_dict(loaded["state_dict"], strict=True)
+        fresh.eval()
+        with torch.no_grad():
+            logits = fresh(x_train)
+            ce_reload = F.cross_entropy(logits, y_train, reduction="mean").item()
+            acc_reload = (logits.argmax(dim=1) == y_train).float().mean().item() * 100
+        print(f"Run 1 (reload verify): ce_mean = {ce_reload:.6f}, acc = {acc_reload:.2f}%")
 
 
 if __name__ == "__main__":

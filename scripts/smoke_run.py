@@ -46,6 +46,7 @@ def main() -> None:
         data_dir=config.data_dir,
         root="./data",
         pin_memory=use_gpu,
+        eval_transform=True,
     )
     # Quick signal-to-noise ratio diagnostic at the starting point
     model = create_model(width_multiplier=config.width_multiplier).to(device)

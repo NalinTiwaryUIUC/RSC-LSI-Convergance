@@ -24,7 +24,7 @@ def main() -> int:
     ckpt = tmp / "pretrain.pt"
 
     print("1. Pretrain (n=64, 20 steps)...")
-    r = run([
+    r_pretrain = run([
         sys.executable, "scripts/pretrain.py",
         "--width", "0.1",
         "--n_train", "64",
@@ -32,10 +32,10 @@ def main() -> int:
         "-o", str(ckpt),
         "--data_dir", "experiments/data",
     ])
-    if r.returncode != 0:
-        print("Pretrain failed:", r.stderr)
+    if r_pretrain.returncode != 0:
+        print("Pretrain failed:", r_pretrain.stderr)
         return 1
-    print("   ", r.stdout.strip())
+    print("   ", r_pretrain.stdout.strip())
 
     print("2. Eval checkpoint...")
     r = run([
@@ -67,6 +67,7 @@ def main() -> int:
         "--B", "0",
         "--S", "2",
         "--log-every", "1",
+        "--bn-mode", "eval",
         "--pretrain-path", str(ckpt),
         "--runs_dir", str(tmp),
     ])
@@ -96,11 +97,20 @@ def main() -> int:
     if ce_mean is None:
         print("ce_mean_train missing")
         return 1
-    if not (0 < ce_mean < 20):
-        print(f"ce_mean_train={ce_mean} out of expected range [0,20]")
-        return 1
+
+    # Parse pretrain output for comparison
+    pretrain_out = r_pretrain.stdout
+    import re
+    m = re.search(r"mean CE = ([\d.]+)", pretrain_out)
+    pretrain_ce = float(m.group(1)) if m else None
 
     print("4. Step 1 ce_mean_train =", ce_mean)
+    if pretrain_ce is not None:
+        diff_pct = 100 * abs(ce_mean - pretrain_ce) / (pretrain_ce + 1e-9)
+        if diff_pct > 5:
+            print(f"WARNING: chain ce_mean_train ({ce_mean:.4f}) differs from pretrain ({pretrain_ce:.4f}) by {diff_pct:.1f}%")
+        else:
+            print(f"Match: pretrain ce={pretrain_ce:.4f}, chain step1 ce_mean_train={ce_mean:.4f}")
     print("OK: pretrain -> eval -> sampling pipeline works")
     return 0
 

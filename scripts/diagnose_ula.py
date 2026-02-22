@@ -76,6 +76,7 @@ def main() -> None:
         data_dir=config.data_dir,
         root=args.root,
         pin_memory=use_gpu,
+        eval_transform=True,
     )
     x_train, y_train = next(iter(train_loader))
     x_train = x_train.to(device, non_blocking=True)
