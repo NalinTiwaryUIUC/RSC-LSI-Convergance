@@ -35,7 +35,9 @@ def main() -> None:
     p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
     p.add_argument("--bn-mode", type=str, default=_DEFAULTS.bn_mode, choices=["eval", "batchstat_frozen"],
-                   help="BN mode for ULA sampling: eval=frozen running stats, batchstat_frozen=batch stats+frozen buffers")
+                   help="BN mode for ULA sampling: eval=frozen running stats (partition-invariant), batchstat_frozen=batch stats+frozen buffers")
+    p.add_argument("--bn-calibration-steps", type=int, default=_DEFAULTS.bn_calibration_steps,
+                   help="When bn_mode=eval: N forward passes (train, no grad) over subset to populate BN running stats before sampling. 0=skip")
     p.add_argument("--data_dir", type=str, default=_DEFAULTS.data_dir, help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
@@ -45,6 +47,10 @@ def main() -> None:
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     p.add_argument("--ce-reduction", type=str, default=_DEFAULTS.ce_reduction, choices=["mean", "sum"],
                    help="CE reduction in U: mean (stable at larger h) or sum")
+    p.add_argument("--clip-grad-norm", type=float, default=None,
+                   help="S3: Clip grad norm to this value; logs grad_norm_pre_clip, grad_norm_post_clip. Omit for no clipping.")
+    p.add_argument("--microbatch-size", type=int, default=None,
+                   help="Per-step batch size for gradient accumulation; effective_batch=n_train. Omit for full-batch.")
     args = p.parse_args()
 
     ensure_directories()
@@ -73,7 +79,15 @@ def main() -> None:
         dataset_seed=args.seed,
         data_dir=args.data_dir,
         bn_mode=args.bn_mode,
+        bn_calibration_steps=args.bn_calibration_steps,
+        clip_grad_norm=args.clip_grad_norm,
     )
+    if args.microbatch_size is not None:
+        if args.microbatch_size <= 0 or args.n_train % args.microbatch_size != 0:
+            raise ValueError("--microbatch-size must divide --n_train")
+        config.microbatch_size = args.microbatch_size
+        config.num_microbatches = args.n_train // args.microbatch_size
+        config.effective_batch_size = args.n_train
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
     run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_chain{args.chain}"

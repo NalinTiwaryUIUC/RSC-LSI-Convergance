@@ -49,9 +49,14 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=None, help="Dataset seed; config default if not set")
     p.add_argument("--bn-mode", type=str, default="eval", choices=["eval", "batchstat_frozen"],
                    help="BN mode for gradient computation; eval=reproducible, batchstat_frozen=ULA-like")
+    p.add_argument("--ce-reduction", type=str, default=None, choices=["mean", "sum"],
+                   help="CE reduction; defaults to config.ce_reduction (matches runs)")
     args = p.parse_args()
 
     ensure_directories()
+    # Lock determinism for diagnostic runs
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
     device = get_device()
     use_gpu = device.type == "cuda"
     _cfg = RunConfig()
@@ -67,6 +72,7 @@ def main() -> None:
     )
     alpha = args.alpha if args.alpha is not None else config.alpha
     noise_scale = args.noise_scale if args.noise_scale is not None else config.noise_scale
+    ce_reduction = args.ce_reduction if args.ce_reduction is not None else config.ce_reduction
     h = config.h
 
     train_loader = get_train_loader(
@@ -115,7 +121,7 @@ def main() -> None:
     # Full gradient: ∇U = ∇NLL + αθ
     # U = sum_CE + (α/2)||θ||²  =>  ∇U = ∇(sum_CE) + αθ
     model.zero_grad(set_to_none=True)
-    U = compute_U(model, train_data, alpha, device)
+    U = compute_U(model, train_data, alpha, device, ce_reduction=ce_reduction)
     U.backward()
     grad_U = torch.cat([p.grad.view(-1) for p in model.parameters()])
     grad_norm = grad_U.norm().item()
@@ -139,7 +145,7 @@ def main() -> None:
         xc, yc = next(iter(train_data))
         xc, yc = xc.to(device), yc.to(device)
     logits = model(xc)
-    ce_only = torch.nn.functional.cross_entropy(logits, yc, reduction="sum")
+    ce_only = torch.nn.functional.cross_entropy(logits, yc, reduction=ce_reduction)
     ce_only.backward()
     grad_ce_direct = torch.cat([p.grad.view(-1) for p in model.parameters()])
     grad_ce_norm = grad_ce_direct.norm().item()
@@ -175,14 +181,14 @@ def main() -> None:
     print()
     print("--- Gradient decomposition ---")
     print(f"  ||∇U||         = {grad_norm:.6f}")
-    print(f"  ||∇NLL||       = {grad_nll_norm:.6f}  (∇(mean_CE), data term)")
+    print(f"  ||∇NLL||       = {grad_nll_norm:.6f}  (∇({ce_reduction}_CE), data term)")
     print(f"  ||αθ||         = {prior_grad_norm:.6f}  (prior term)")
     if grad_norm > 1e-10:
         print(f"  prior/||∇U||   = {prior_grad_norm/grad_norm:.4f}  (prior fraction)")
     else:
         print("  prior/||∇U||   = (∇U≈0)")
     print(f"  ||∇U-(∇NLL+αθ)|| = {residual:.2e}  (sanity: should be ~0)")
-    print(f"  ||∇(CE)_direct|| = {grad_ce_norm:.6f}  (cross-check: ∇(mean_CE) alone)")
+    print(f"  ||∇(CE)_direct|| = {grad_ce_norm:.6f}  (cross-check: ∇({ce_reduction}_CE) alone)")
     print(f"  ||∇NLL-∇(CE)_direct|| = {nll_consistency:.2e}  (should be ~0)")
     if grad_norm < 0.01 * min(grad_nll_norm, prior_grad_norm) and min(grad_nll_norm, prior_grad_norm) > 1e-6:
         print()

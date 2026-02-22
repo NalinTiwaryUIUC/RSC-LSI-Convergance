@@ -25,6 +25,10 @@ import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Lock determinism for diagnostic runs
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
 from data import get_train_loader
 from models import create_model
 

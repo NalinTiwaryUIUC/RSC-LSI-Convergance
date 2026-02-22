@@ -99,6 +99,20 @@ def run_chain(
     d = flatten_params(model).numel()
     config.param_count = d
     config.ou_radius_pred = math.sqrt(d / config.alpha)
+    # Batching: ULA uses full-batch unless overridden for testing
+    if config.effective_batch_size is None:
+        config.effective_batch_size = config.n_train
+    if config.num_microbatches is None:
+        config.num_microbatches = 1
+    if config.microbatch_size is None:
+        config.microbatch_size = config.n_train
+    # Guard: batchstat_frozen requires full-batch (partition-invariant target)
+    if config.bn_mode == "batchstat_frozen":
+        if config.num_microbatches != 1 or config.microbatch_size != config.n_train:
+            raise ValueError(
+                "bn_mode=batchstat_frozen requires full-batch (num_microbatches=1, microbatch_size=n_train). "
+                "Use bn_mode=eval for microbatches, or use full-batch."
+            )
     write_run_config(config, run_dir)
 
     if pretrain_path is not None:
@@ -121,13 +135,31 @@ def run_chain(
     theta0_flat = flatten_params(model).clone().detach()  # reference for probes
     theta0_norm_sq = (theta0_flat.norm().item()) ** 2  # for OU theta_norm_sq_pred
     if config.bn_mode == "eval":
-        model.eval()
+        bn_cal = getattr(config, "bn_calibration_steps", 0)
+        if bn_cal > 0:
+            # BN calibration: forward passes in train mode (no grad) to populate running stats for this subset
+            model.train()
+            with torch.no_grad():
+                x_tr, y_tr = train_data
+                for _ in range(bn_cal):
+                    _ = model(x_tr)
+            model.eval()
+        else:
+            model.eval()
     elif config.bn_mode == "batchstat_frozen":
         from run.bn_mode import set_bn_batchstats_freeze_buffers
 
         set_bn_batchstats_freeze_buffers(model)
     else:
         raise ValueError(f"Unknown bn_mode: {config.bn_mode}")
+
+    # S1: In bn_mode=eval, running_mean/var are the fixed target. Log once after calibration/pretrain.
+    bn_runmean_maxabs_post_init: float | None = None
+    bn_runvar_maxabs_post_init: float | None = None
+    if config.bn_mode == "eval":
+        bn_st = bn_buffer_stats(model)
+        bn_runmean_maxabs_post_init = bn_st["bn_runmean_maxabs"]
+        bn_runvar_maxabs_post_init = bn_st["bn_runvar_maxabs"]
 
     # Projections (fixed across chain) — move to device once
     v1, v2 = get_or_create_param_projections(
@@ -153,9 +185,13 @@ def run_chain(
 
     T, B, S, G = config.T, config.B, config.S, config.grad_norm_stride
     log_U_every = config.log_every if log_U_every is None else log_U_every
+    abort_K = getattr(config, "abort_consecutive_intervals", 3)
+    abort_after_burnin = getattr(config, "abort_after_burnin_only", True)
     U_prev: float | None = None
     dist_to_ref_at_step1: float | None = None
-    nll_probe_at_step1: float | None = None
+    nll_probe_mean_at_step1: float | None = None
+    bad_locality_consecutive: int = 0
+    bad_prediction_consecutive: int = 0
     act_logger, act_hooks = register_activation_hooks(model, basic_block_predicate)
     try:
         for step in range(1, T + 1):
@@ -170,6 +206,9 @@ def run_chain(
                 return_U=(step % log_U_every == 0 or step == 1),
                 generator=gen,
                 ce_reduction=config.ce_reduction,
+                clip_grad_norm=getattr(config, "clip_grad_norm", None),
+                num_microbatches=config.num_microbatches,
+                microbatch_size=config.microbatch_size,
             )
             if step % config.log_every == 0 or step == 1:
                 vals = evaluate_probes(
@@ -209,6 +248,9 @@ def run_chain(
                         f_nll=vals.get("f_nll"), f_margin=vals.get("f_margin"), snr=snr_val, delta_U=delta_U_val,
                         finite_loss=finite_loss, finite_params=finite_params, finite_grad=finite_grad,
                         nan_count_params=nan_params, nan_count_grads=nan_grads,
+                        microbatch_size=config.microbatch_size,
+                        num_microbatches=config.num_microbatches,
+                        effective_batch_size=config.effective_batch_size,
                     )
                     write_samples_metrics(
                         run_dir, steps_saved, grad_evals_saved, f_values, grad_norm_sq,
@@ -216,11 +258,16 @@ def run_chain(
                     return
 
                 # Capture step-1 baselines for stop flags
+                nll_probe_mean = (
+                    pm["nll_probe"] / config.n_train
+                    if config.ce_reduction == "sum"
+                    else pm["nll_probe"]
+                )
                 if step == 1:
                     f_dist_val = vals.get("f_dist")
                     if f_dist_val is not None and f_dist_val >= 0:
                         dist_to_ref_at_step1 = math.sqrt(f_dist_val)
-                    nll_probe_at_step1 = pm["nll_probe"]
+                    nll_probe_mean_at_step1 = nll_probe_mean
 
                 # A. U decomposition + scale sanity
                 theta_norm_val = out.get("theta_norm")
@@ -253,20 +300,39 @@ def run_chain(
                     else None
                 )
 
-                # D. Stop-early flags
-                bad_locality = (
-                    dist_to_ref is not None
-                    and dist_to_ref_at_step1 is not None
-                    and dist_to_ref_at_step1 > 0
-                    and dist_to_ref > 5 * dist_to_ref_at_step1
+                # D. Stop-early flags (OU/diffusion-normalized, debounced, after burn-in)
+                t = step * config.h
+                past_burnin = (not abort_after_burnin) or (step > B)
+                # bad_locality: dist / sqrt(t) > 5 * sqrt(2d) (diffusion-normalized; 5x above expected)
+                bad_locality_raw = False
+                if dist_to_ref is not None and t > 1e-15 and d > 0:
+                    diff_scale = math.sqrt(2.0 * d)
+                    threshold = 5.0 * diff_scale
+                    bad_locality_raw = dist_to_ref / math.sqrt(t) > threshold
+                if past_burnin and bad_locality_raw:
+                    bad_locality_consecutive += 1
+                else:
+                    bad_locality_consecutive = 0
+                bad_locality = past_burnin and bad_locality_consecutive >= abort_K
+
+                # bad_prediction: based on nll_mean (scale-invariant)
+                bad_prediction_raw = (
+                    nll_probe_mean_at_step1 is not None
+                    and nll_probe_mean > 2.0 * nll_probe_mean_at_step1 + 2.0
                 )
-                bad_prediction = (
-                    nll_probe_at_step1 is not None
-                    and pm["nll_probe"] > 2 * nll_probe_at_step1 + 2.0
-                )
+                if past_burnin and bad_prediction_raw:
+                    bad_prediction_consecutive += 1
+                else:
+                    bad_prediction_consecutive = 0
+                bad_prediction = past_burnin and bad_prediction_consecutive >= abort_K
+
                 abort_suggested = bad_locality or bad_prediction
 
+                # S2: Batching metadata in every log (prevents hidden target drift)
                 extra: Dict[str, Any] = {
+                    "microbatch_size": config.microbatch_size,
+                    "num_microbatches": config.num_microbatches,
+                    "effective_batch_size": config.effective_batch_size,
                     "theta_max_abs": theta_max,
                     "finite_params": finite_params,
                     "finite_grad": finite_grad,
@@ -278,6 +344,7 @@ def run_chain(
                     "logsumexp_max": pm["logsumexp_max"],
                     "pmax_mean": pm["pmax_mean"],
                     "nll_probe": pm["nll_probe"],
+                    "nll_probe_mean": nll_probe_mean,
                     "margin_probe": pm["margin_probe"],
                     "logits_finite": pm["logits_finite"],
                     "drift_step_norm": out.get("drift_step_norm"),
@@ -297,10 +364,22 @@ def run_chain(
                     "theta_norm_sq_pred_ou": theta_norm_sq_pred_ou,
                     "theta_norm_sq_over_pred_ou": theta_norm_sq_over_pred_ou,
                     # D. Stop flags
+                    "bad_locality_raw": bad_locality_raw,
+                    "bad_prediction_raw": bad_prediction_raw,
+                    "bad_locality_consecutive": bad_locality_consecutive,
+                    "bad_prediction_consecutive": bad_prediction_consecutive,
                     "bad_locality": bad_locality,
                     "bad_prediction": bad_prediction,
                     "abort_suggested": abort_suggested,
                 }
+                # S3: grad norms pre/post clipping (when clip_grad_norm is set)
+                if out.get("grad_norm_pre_clip") is not None and out.get("grad_norm_post_clip") is not None:
+                    extra["grad_norm_pre_clip"] = out["grad_norm_pre_clip"]
+                    extra["grad_norm_post_clip"] = out["grad_norm_post_clip"]
+                # S1: BN stats post calibration/pretrain (log once at step 1 for bn_mode=eval)
+                if step == 1 and bn_runmean_maxabs_post_init is not None:
+                    extra["bn_runmean_maxabs"] = bn_runmean_maxabs_post_init
+                    extra["bn_runvar_maxabs"] = bn_runvar_maxabs_post_init
                 if step % 500 == 0:
                     bn_st = bn_buffer_stats(model)
                     extra["bn_runmean_maxabs"] = bn_st["bn_runmean_maxabs"]

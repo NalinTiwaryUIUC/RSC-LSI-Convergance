@@ -46,6 +46,7 @@ class RunConfig:
     ce_reduction: str = "sum"  # "mean" or "sum"; mean = stable at larger h, sum = matches log-posterior scale
     temperature: float = 1.0
     noise_scale: float = 1.0  # standard ULA uses 1; <1 = less noise, >1 = more diffusion
+    clip_grad_norm: float | None = None  # S3: if set, clip grad and log grad_norm_pre_clip, grad_norm_post_clip
 
     # Chain
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
@@ -61,8 +62,14 @@ class RunConfig:
     # Probes / LSI
     grad_norm_stride: int = 5  # compute grad norms every G saved samples
 
-    # BN mode for ULA sampling: "eval" (frozen running stats) | "batchstat_frozen" (batch stats, frozen buffers)
-    bn_mode: str = "batchstat_frozen"
+    # Abort / stop-early debouncing
+    abort_consecutive_intervals: int = 3  # flag only after K consecutive bad logs
+    abort_after_burnin_only: bool = True  # only consider abort after step > B
+
+    # BN mode for ULA sampling: "eval" (frozen running stats, partition-invariant) | "batchstat_frozen" (batch stats, frozen buffers)
+    bn_mode: str = "eval"
+    # BN calibration: when bn_mode=eval and >0, run N forward passes (train mode, no grad) over train subset to populate running stats, then eval for sampling. 0=skip.
+    bn_calibration_steps: int = 0
 
     # Seeds (for reproducibility)
     dataset_seed: int = 42
@@ -74,6 +81,10 @@ class RunConfig:
     run_dir: str | None = None
     param_count: int | None = None  # set at run time for diagnostics (d = num params)
     ou_radius_pred: float | None = None  # sqrt(d/alpha), OU stationary std; for "pure prior diffusion" test
+    # Batching (set at run time to prevent "we thought full-batch, but actually microbatch" confusion)
+    effective_batch_size: int | None = None  # batch size used for forward/backward in ULA
+    num_microbatches: int | None = None  # 1 = full-batch; >1 = gradient accumulation over microbatch_size
+    microbatch_size: int | None = None  # per-forward batch size; = effective_batch_size when num_microbatches=1
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
