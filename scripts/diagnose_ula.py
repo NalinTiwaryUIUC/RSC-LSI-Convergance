@@ -112,7 +112,7 @@ def main() -> None:
         raise ValueError(f"Unknown bn_mode: {args.bn_mode}")
 
     # Full gradient: ∇U = ∇NLL + αθ
-    # U = mean_CE + (α/2)||θ||²  =>  ∇U = ∇(mean_CE) + αθ
+    # U = sum_CE + (α/2)||θ||²  =>  ∇U = ∇(sum_CE) + αθ
     model.zero_grad(set_to_none=True)
     U = compute_U(model, train_data, alpha, device)
     U.backward()
@@ -120,7 +120,7 @@ def main() -> None:
     grad_norm = grad_U.norm().item()
 
     prior_grad = alpha * theta  # ∇(α/2 ||θ||²) = αθ
-    grad_NLL = grad_U - prior_grad  # ∇(mean_CE) by construction
+    grad_NLL = grad_U - prior_grad  # ∇(sum_CE) by construction
     grad_nll_norm = grad_NLL.norm().item()
     prior_grad_norm = prior_grad.norm().item()
 
@@ -129,7 +129,7 @@ def main() -> None:
     if residual > 1e-6:
         print(f"WARNING: decomposition residual ||∇U - (∇NLL+αθ)|| = {residual:.2e} (should be ~0)")
 
-    # Cross-check: compute ∇(mean_CE) directly (no prior)
+    # Cross-check: compute ∇(sum_CE) directly (no prior)
     model.eval()
     model.zero_grad(set_to_none=True)
     if isinstance(train_data, tuple):
@@ -138,7 +138,7 @@ def main() -> None:
         xc, yc = next(iter(train_data))
         xc, yc = xc.to(device), yc.to(device)
     logits = model(xc)
-    ce_only = torch.nn.functional.cross_entropy(logits, yc, reduction="mean")
+    ce_only = torch.nn.functional.cross_entropy(logits, yc, reduction="sum")
     ce_only.backward()
     grad_ce_direct = torch.cat([p.grad.view(-1) for p in model.parameters()])
     grad_ce_norm = grad_ce_direct.norm().item()

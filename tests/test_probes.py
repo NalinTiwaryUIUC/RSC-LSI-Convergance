@@ -41,9 +41,9 @@ class TestEvaluateProbes(unittest.TestCase):
             self.assertIn(k, ["f_nll", "f_margin", "f_pc1", "f_pc2", "f_proj1", "f_proj2", "f_dist"])
             self.assertIsInstance(v, float)
             self.assertTrue(torch.isfinite(torch.tensor(v)).item(), msg=k)
-        # f_nll is mean CE: for 10 classes, random init gives ~ln(10)≈2.3; must be finite and bounded
+        # f_nll is sum CE on probe set (32 samples): ~32*ln(10)≈74 for random init; must be finite
         self.assertGreaterEqual(values["f_nll"], 0.0, msg="f_nll (CE) non-negative")
-        self.assertLess(values["f_nll"], 50.0, msg="f_nll should not explode on random init")
+        self.assertLess(values["f_nll"], 200.0, msg="f_nll (sum CE) should not explode on random init")
         # f_margin can be negative (correct) or positive; magnitude should be bounded
         self.assertGreater(values["f_margin"], -100.0)
         self.assertLess(values["f_margin"], 100.0)

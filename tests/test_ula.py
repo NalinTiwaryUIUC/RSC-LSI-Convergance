@@ -37,7 +37,7 @@ class TestPotential(unittest.TestCase):
         U = compute_U(model, train, alpha=1e-2, device=device)
         self.assertTrue(U.dim() == 0 or U.numel() == 1)
         self.assertTrue(torch.isfinite(U).item())
-        # U = mean CE + (alpha/2)*||theta||^2 is positive and not exploded
+        # U = sum CE + (alpha/2)*||theta||^2 is positive and not exploded
         u_val = U.item()
         self.assertGreater(u_val, 0.0, msg="U should be positive")
         self.assertLess(u_val, 1e7, msg="U should not explode on small setup")

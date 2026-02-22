@@ -61,7 +61,7 @@ def probe_metrics(
     logsumexp_max = lse.max().item()
     probs = F.softmax(logits, dim=1)
     pmax_mean = probs.max(dim=1).values.mean().item()
-    nll = F.cross_entropy(logits, yb, reduction="mean").item()
+    nll = F.cross_entropy(logits, yb, reduction="sum").item()
     y_logit = logits.gather(1, yb.view(-1, 1)).squeeze(1)
     tmp = logits.clone()
     tmp.scatter_(1, yb.view(-1, 1), float("-inf"))

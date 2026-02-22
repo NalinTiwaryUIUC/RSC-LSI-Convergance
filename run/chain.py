@@ -220,13 +220,13 @@ def run_chain(
                         dist_to_ref_at_step1 = math.sqrt(f_dist_val)
                     nll_probe_at_step1 = pm["nll_probe"]
 
-                # A. U decomposition + scale sanity (U uses mean CE)
+                # A. U decomposition + scale sanity (U uses sum CE)
                 theta_norm_val = out.get("theta_norm")
                 U_prior = (0.5 * config.alpha * (theta_norm_val**2)) if theta_norm_val is not None else None
                 U_data = (U_now - U_prior) if (U_now is not None and U_prior is not None) else None
-                ce_mean_train = U_data  # U = ce_mean + U_prior
-                ce_sum_train = config.n_train * ce_mean_train if ce_mean_train is not None else None
-                U_data_minus_ce = (U_data - ce_mean_train) if ce_mean_train is not None else None
+                ce_sum_train = U_data  # U = sum CE + U_prior
+                ce_mean_train = (U_data / config.n_train) if (U_data is not None and config.n_train > 0) else None
+                U_data_minus_ce = (U_data - ce_sum_train) if ce_sum_train is not None else None
 
                 # B. Locality relative to pretrained checkpoint
                 f_dist_val = vals.get("f_dist")

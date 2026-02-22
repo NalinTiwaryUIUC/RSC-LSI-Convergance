@@ -12,11 +12,11 @@ import torch.nn.functional as F
 from models.params import flatten_params
 
 
-def _mean_ce_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+def _sum_ce_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     # Mode set by caller
     with torch.no_grad():
         logits = model(x)
-    return F.cross_entropy(logits, y, reduction="mean")
+    return F.cross_entropy(logits, y, reduction="sum")
 
 
 def _mean_margin_on_probe(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -67,11 +67,11 @@ def evaluate_probes(
 
     out = {}
 
-    # f_nll: mean CE (need grad for LSI later; here just value)
+    # f_nll: sum CE on probe set (need grad for LSI later; here just value)
     # Mode set by caller
     with torch.no_grad():
         logits = model(x)
-        out["f_nll"] = F.cross_entropy(logits, y, reduction="mean").item()
+        out["f_nll"] = F.cross_entropy(logits, y, reduction="sum").item()
 
     # f_margin
     with torch.no_grad():
@@ -131,7 +131,7 @@ def get_probe_value_for_grad(
 
     if probe_name == "f_nll":
         logits = model(x)
-        return F.cross_entropy(logits, y, reduction="mean")
+        return F.cross_entropy(logits, y, reduction="sum")
     if probe_name == "f_margin":
         logits = model(x)
         n = logits.size(0)

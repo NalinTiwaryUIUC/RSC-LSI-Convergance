@@ -42,7 +42,7 @@ def main() -> None:
     p.add_argument("--width", type=float, default=1.0, help="Width multiplier")
     p.add_argument("--n_train", type=int, default=1024, help="Training subset size")
     p.add_argument("--pretrain-steps", type=int, default=2000, help="SGD steps")
-    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate")
+    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate for pretraining")
     p.add_argument("-o", "--output", type=str, default=None,
                    help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}.pt")
     p.add_argument("--data_dir", type=str, default="experiments/data")
