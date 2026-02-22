@@ -72,6 +72,7 @@ class RunConfig:
     chain_id: int = 0
     run_dir: str | None = None
     param_count: int | None = None  # set at run time for diagnostics (d = num params)
+    ou_radius_pred: float | None = None  # sqrt(d/alpha), OU stationary std; for "pure prior diffusion" test
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

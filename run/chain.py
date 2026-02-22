@@ -98,6 +98,7 @@ def run_chain(
     ).to(device)
     d = flatten_params(model).numel()
     config.param_count = d
+    config.ou_radius_pred = math.sqrt(d / config.alpha)
     write_run_config(config, run_dir)
 
     if pretrain_path is not None:
@@ -118,6 +119,7 @@ def run_chain(
         )
 
     theta0_flat = flatten_params(model).clone().detach()  # reference for probes
+    theta0_norm_sq = (theta0_flat.norm().item()) ** 2  # for OU theta_norm_sq_pred
     if config.bn_mode == "eval":
         model.eval()
     elif config.bn_mode == "batchstat_frozen":
@@ -152,6 +154,8 @@ def run_chain(
     T, B, S, G = config.T, config.B, config.S, config.grad_norm_stride
     log_U_every = config.log_every if log_U_every is None else log_U_every
     U_prev: float | None = None
+    dist_to_ref_at_step1: float | None = None
+    nll_probe_at_step1: float | None = None
     act_logger, act_hooks = register_activation_hooks(model, basic_block_predicate)
     try:
         for step in range(1, T + 1):
@@ -209,6 +213,53 @@ def run_chain(
                     )
                     return
 
+                # Capture step-1 baselines for stop flags
+                if step == 1:
+                    f_dist_val = vals.get("f_dist")
+                    if f_dist_val is not None and f_dist_val >= 0:
+                        dist_to_ref_at_step1 = math.sqrt(f_dist_val)
+                    nll_probe_at_step1 = pm["nll_probe"]
+
+                # A. U decomposition + scale sanity (U uses mean CE)
+                theta_norm_val = out.get("theta_norm")
+                U_prior = (0.5 * config.alpha * (theta_norm_val**2)) if theta_norm_val is not None else None
+                U_data = (U_now - U_prior) if (U_now is not None and U_prior is not None) else None
+                ce_mean_train = U_data  # U = ce_mean + U_prior
+                ce_sum_train = config.n_train * ce_mean_train if ce_mean_train is not None else None
+                U_data_minus_ce = (U_data - ce_mean_train) if ce_mean_train is not None else None
+
+                # B. Locality relative to pretrained checkpoint
+                f_dist_val = vals.get("f_dist")
+                dist_to_ref_sq = f_dist_val
+                dist_to_ref = math.sqrt(f_dist_val) if f_dist_val is not None and f_dist_val >= 0 else None
+
+                # C. OU "pure prior diffusion" test
+                ou_radius_pred = config.ou_radius_pred
+                theta_norm_over_ou = (theta_norm_val / ou_radius_pred) if (theta_norm_val is not None and ou_radius_pred) else None
+                t = step * config.h
+                theta_norm_sq_pred_ou = (
+                    math.exp(-2 * config.alpha * t) * theta0_norm_sq
+                    + (d / config.alpha) * (1 - math.exp(-2 * config.alpha * t))
+                )
+                theta_norm_sq_over_pred_ou = (
+                    (theta_norm_val**2) / theta_norm_sq_pred_ou
+                    if (theta_norm_val is not None and theta_norm_sq_pred_ou > 0)
+                    else None
+                )
+
+                # D. Stop-early flags
+                bad_locality = (
+                    dist_to_ref is not None
+                    and dist_to_ref_at_step1 is not None
+                    and dist_to_ref_at_step1 > 0
+                    and dist_to_ref > 5 * dist_to_ref_at_step1
+                )
+                bad_prediction = (
+                    nll_probe_at_step1 is not None
+                    and pm["nll_probe"] > 2 * nll_probe_at_step1 + 2.0
+                )
+                abort_suggested = bad_locality or bad_prediction
+
                 extra: Dict[str, Any] = {
                     "theta_max_abs": theta_max,
                     "finite_params": finite_params,
@@ -226,6 +277,23 @@ def run_chain(
                     "drift_step_norm": out.get("drift_step_norm"),
                     "noise_step_norm": out.get("noise_step_norm"),
                     "delta_theta_norm": out.get("delta_theta_norm"),
+                    # A. U decomposition
+                    "U_prior": U_prior,
+                    "U_data": U_data,
+                    "ce_mean_train": ce_mean_train,
+                    "ce_sum_train": ce_sum_train,
+                    "U_data_minus_ce": U_data_minus_ce,
+                    # B. Locality
+                    "dist_to_ref": dist_to_ref,
+                    "dist_to_ref_sq": dist_to_ref_sq,
+                    # C. OU test
+                    "theta_norm_over_ou": theta_norm_over_ou,
+                    "theta_norm_sq_pred_ou": theta_norm_sq_pred_ou,
+                    "theta_norm_sq_over_pred_ou": theta_norm_sq_over_pred_ou,
+                    # D. Stop flags
+                    "bad_locality": bad_locality,
+                    "bad_prediction": bad_prediction,
+                    "abort_suggested": abort_suggested,
                 }
                 if step % 500 == 0:
                     bn_st = bn_buffer_stats(model)
