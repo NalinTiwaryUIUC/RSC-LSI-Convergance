@@ -41,7 +41,9 @@ def main() -> None:
     p.add_argument("--data_dir", type=str, default=_DEFAULTS.data_dir, help="Indices and projections")
     p.add_argument("--runs_dir", type=str, default="experiments/runs", help="Parent dir for run dirs")
     p.add_argument("--root", type=str, default="./data", help="CIFAR-10 download root")
-    p.add_argument("--seed", type=int, default=_DEFAULTS.dataset_seed, help="Dataset seed")
+    p.add_argument("--dataset-seed", type=int, default=_DEFAULTS.dataset_seed, help="For train/probe subset indices")
+    p.add_argument("--chain-seed", type=int, default=None, help="Langevin noise; default: dataset_seed + chain*1000")
+    p.add_argument("--probe-projection-seed", type=int, default=_DEFAULTS.probe_projection_seed, help="Probe projection vectors")
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
@@ -75,12 +77,13 @@ def main() -> None:
         noise_scale=args.noise_scale,
         pretrain_steps=args.pretrain_steps,
         pretrain_lr=args.pretrain_lr,
-        chain_seed=args.seed + args.chain * 1000,
-        dataset_seed=args.seed,
         data_dir=args.data_dir,
         bn_mode=args.bn_mode,
         bn_calibration_steps=args.bn_calibration_steps,
         clip_grad_norm=args.clip_grad_norm,
+        dataset_seed=args.dataset_seed,
+        chain_seed=args.chain_seed if args.chain_seed is not None else args.dataset_seed + args.chain * 1000,
+        probe_projection_seed=args.probe_projection_seed,
     )
     if args.microbatch_size is not None:
         if args.microbatch_size <= 0 or args.n_train % args.microbatch_size != 0:
@@ -96,7 +99,7 @@ def main() -> None:
     train_loader = get_train_loader(
         config.n_train,
         batch_size=config.n_train,
-        dataset_seed=config.dataset_seed,
+        dataset_seed=args.dataset_seed,
         data_dir=config.data_dir,
         root=args.root,
         pin_memory=use_gpu,
@@ -104,7 +107,7 @@ def main() -> None:
     )
     probe_loader = get_probe_loader(
         config.probe_size,
-        dataset_seed=config.dataset_seed + 1,
+        dataset_seed=args.dataset_seed + 1,
         data_dir=config.data_dir,
         root=args.root,
         pin_memory=use_gpu,

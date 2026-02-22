@@ -2,8 +2,12 @@
 Pretrain a model with fixed random seed. Saves checkpoint for use by run_single_chain and diagnose_ula.
 Use the same checkpoint across all chains for a given (width, n_train) to standardize initialization.
 
+Objective: loss = ce_mean + 0.5 * (alpha / n_train) * ||θ||² — same minimizer as CE_sum + (α/2)||θ||².
+BN: pretrain in train(); after pretrain, BN calibration pass (forward in train mode, fixed microbatch_size);
+    then eval() for sampling.
+
 Usage:
-  python scripts/pretrain.py --width 1 --n_train 1024 --pretrain-steps 2000
+  python scripts/pretrain.py --width 0.1 --n_train 1024 --alpha 0.1 --pretrain-steps 2000
   python scripts/pretrain.py --width 0.1 --n_train 1024 -o experiments/checkpoints/pretrain_w0.1_n1024.pt
 """
 from __future__ import annotations
@@ -22,8 +26,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data import get_train_loader
 from models import create_model
 
-# Fixed seed for reproducibility across runs
+# Fixed seed for reproducibility across runs (use same subset indices across widths)
 PRETRAIN_SEED = 42
+
+# Fixed microbatch size for BN calibration (constant across widths)
+BN_CALIBRATION_MICROBATCH = 256
 
 
 def set_pretrain_seed(seed: int = PRETRAIN_SEED) -> None:
@@ -38,20 +45,24 @@ def set_pretrain_seed(seed: int = PRETRAIN_SEED) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Pretrain model with fixed seed")
+    p = argparse.ArgumentParser(description="Pretrain model with fixed seed (MAP objective + BN calibration)")
     p.add_argument("--width", type=float, default=1.0, help="Width multiplier")
     p.add_argument("--n_train", type=int, default=1024, help="Training subset size")
+    p.add_argument("--alpha", type=float, default=0.1, help="L2 prior strength (same as chain; scales loss L2 as alpha/n_train)")
     p.add_argument("--pretrain-steps", type=int, default=2000, help="SGD steps")
-    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate for pretraining")
+    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate (no weight_decay; L2 in loss)")
     p.add_argument("-o", "--output", type=str, default=None,
                    help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}.pt")
+    p.add_argument("--bn-calibration-microbatch", type=int, default=BN_CALIBRATION_MICROBATCH,
+                   help="Microbatch size for BN calibration forward pass (fixed across widths)")
     p.add_argument("--data_dir", type=str, default="experiments/data")
     p.add_argument("--root", type=str, default="./data")
-    p.add_argument("--seed", type=int, default=PRETRAIN_SEED, help="Fixed seed for reproducibility")
+    p.add_argument("--dataset-seed", type=int, default=42, help="For train_subset_indices.json only")
+    p.add_argument("--pretrain-seed", type=int, default=PRETRAIN_SEED, help="Init + optimizer randomness")
     p.add_argument("--verify", action="store_true", help="Run 1: reload from disk and verify ce/acc on same batch")
     args = p.parse_args()
 
-    set_pretrain_seed(args.seed)
+    set_pretrain_seed(args.pretrain_seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     use_gpu = device.type == "cuda"
@@ -59,7 +70,7 @@ def main() -> None:
     train_loader = get_train_loader(
         args.n_train,
         batch_size=args.n_train,
-        dataset_seed=args.seed,
+        dataset_seed=args.dataset_seed,
         data_dir=args.data_dir,
         root=args.root,
         pin_memory=use_gpu,
@@ -70,18 +81,30 @@ def main() -> None:
     y_train = y_train.to(device, non_blocking=True)
 
     model = create_model(width_multiplier=args.width).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.pretrain_lr, momentum=0.9)
+    # No weight_decay; L2 penalty explicit in loss to match sampling target
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.pretrain_lr, momentum=0.9, weight_decay=0.0)
 
+    # Objective: ce_mean + 0.5 * (alpha / n_train) * ||θ||² — same minimizer as CE_sum + (α/2)||θ||²
     model.train()
     for _ in range(args.pretrain_steps):
         optimizer.zero_grad(set_to_none=True)
         logits = model(x_train)
-        loss = F.cross_entropy(logits, y_train, reduction="mean")
+        ce_mean = F.cross_entropy(logits, y_train, reduction="mean")
+        reg = (0.5 * args.alpha / args.n_train) * sum((p * p).sum() for p in model.parameters())
+        loss = ce_mean + reg
         loss.backward()
         optimizer.step()
 
-    # Final metrics on same batch (eval mode for reproducibility)
+    # BN calibration: forward passes in train mode (no grad) with fixed microbatch_size to populate running stats
+    model.train()
+    microbatch = args.bn_calibration_microbatch
+    with torch.no_grad():
+        for start in range(0, args.n_train, microbatch):
+            end = min(start + microbatch, args.n_train)
+            _ = model(x_train[start:end])
     model.eval()
+
+    # Final metrics on same batch (eval mode for reproducibility)
     with torch.no_grad():
         logits = model(x_train)
         ce_mean = F.cross_entropy(logits, y_train, reduction="mean").item()
@@ -98,7 +121,13 @@ def main() -> None:
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"state_dict": model.state_dict(), "width": args.width, "n_train": args.n_train}, out_path)
+    # state_dict includes BN running_mean/var after calibration (part of eval target)
+    torch.save({
+        "state_dict": model.state_dict(),
+        "width": args.width,
+        "n_train": args.n_train,
+        "alpha": args.alpha,
+    }, out_path)
     print("Wrote", out_path)
 
     # Run 1: Reload verify — re-instantiate, load from disk, eval on same batch
