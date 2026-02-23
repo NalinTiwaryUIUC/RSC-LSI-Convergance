@@ -28,8 +28,8 @@ bn_calibration_steps: 0
 dataset_seed: 42
 chain_seed: 42000
 probe_projection_seed: 12345
-chain_id: 0
-run_dir: experiments/runs/w0.1_n1024_h5e-08_a0.1_chain0
+chain_id: 2
+run_dir: experiments/runs/w0.1_n1024_h5e-08_a0.1_chain2
 param_count: 99616
 ou_radius_pred: 998.0781532525397
 effective_batch_size: 1024
