@@ -60,6 +60,10 @@ def main() -> None:
     p.add_argument("--dataset-seed", type=int, default=42, help="For train_subset_indices.json only")
     p.add_argument("--pretrain-seed", type=int, default=PRETRAIN_SEED, help="Init + optimizer randomness")
     p.add_argument("--verify", action="store_true", help="Run 1: reload from disk and verify ce/acc on same batch")
+    p.add_argument("--arch", type=str, default="resnet18", choices=["resnet18", "small_resnet_ln"],
+                   help="Model architecture to pretrain.")
+    p.add_argument("--num-blocks", type=int, default=2,
+                   help="Number of residual blocks for small_resnet_ln (ignored for resnet18).")
     args = p.parse_args()
 
     set_pretrain_seed(args.pretrain_seed)
@@ -80,7 +84,12 @@ def main() -> None:
     x_train = x_train.to(device, non_blocking=True)
     y_train = y_train.to(device, non_blocking=True)
 
-    model = create_model(width_multiplier=args.width).to(device)
+    model = create_model(
+        width_multiplier=args.width,
+        num_classes=10,
+        arch=args.arch,
+        num_blocks=args.num_blocks,
+    ).to(device)
     # No weight_decay; L2 penalty explicit in loss to match sampling target
     optimizer = torch.optim.SGD(model.parameters(), lr=args.pretrain_lr, momentum=0.9, weight_decay=0.0)
 
@@ -127,6 +136,8 @@ def main() -> None:
         "width": args.width,
         "n_train": args.n_train,
         "alpha": args.alpha,
+        "arch": args.arch,
+        "num_blocks": args.num_blocks,
     }, out_path)
     print("Wrote", out_path)
 
@@ -135,7 +146,12 @@ def main() -> None:
         batch_path = out_path.with_suffix(".batch.pt")
         torch.save({"x": x_train.cpu(), "y": y_train.cpu()}, batch_path)
         print("Saved batch to", batch_path)
-        fresh = create_model(width_multiplier=args.width).to(device)
+        fresh = create_model(
+            width_multiplier=args.width,
+            num_classes=10,
+            arch=args.arch,
+            num_blocks=args.num_blocks,
+        ).to(device)
         loaded = torch.load(out_path, map_location=device, weights_only=True)
         fresh.load_state_dict(loaded["state_dict"], strict=True)
         fresh.eval()

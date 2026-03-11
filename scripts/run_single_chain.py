@@ -53,6 +53,10 @@ def main() -> None:
                    help="S3: Clip grad norm to this value; logs grad_norm_pre_clip, grad_norm_post_clip. Omit for no clipping.")
     p.add_argument("--microbatch-size", type=int, default=None,
                    help="Per-step batch size for gradient accumulation; effective_batch=n_train. Omit for full-batch.")
+    p.add_argument("--arch", type=str, default=_DEFAULTS.arch, choices=["resnet18", "small_resnet_ln"],
+                   help="Model architecture: resnet18 (default) or small_resnet_ln (LayerNorm small ResNet).")
+    p.add_argument("--num-blocks", type=int, default=_DEFAULTS.num_blocks,
+                   help="Number of residual blocks for small_resnet_ln (ignored for resnet18).")
     args = p.parse_args()
 
     ensure_directories()
@@ -66,6 +70,8 @@ def main() -> None:
         n_train=args.n_train,
         probe_size=args.probe_size,
         width_multiplier=args.width,
+        arch=args.arch,
+        num_blocks=args.num_blocks,
         h=args.h,
         alpha=args.alpha,
         ce_reduction=args.ce_reduction,

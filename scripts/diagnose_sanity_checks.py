@@ -234,6 +234,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--n_train", type=int, default=1024)
     p.add_argument("--width", type=float, default=0.1)
+    p.add_argument("--arch", type=str, default="resnet18", choices=["resnet18", "small_resnet_ln"])
+    p.add_argument("--num-blocks", type=int, default=2)
     p.add_argument("--alpha", type=float, default=0.1)
     p.add_argument("--h", type=float, default=1e-9)
     p.add_argument("--pretrain-path", type=str, default=None)
@@ -258,7 +260,12 @@ def main():
     y_full = y_full.to(device)
     train_data = (x_full, y_full)
 
-    model = create_model(width_multiplier=args.width).to(device)
+    model = create_model(
+        width_multiplier=args.width,
+        num_classes=10,
+        arch=args.arch,
+        num_blocks=args.num_blocks,
+    ).to(device)
     d = flatten_params(model).numel()
 
     if args.pretrain_path:

@@ -15,13 +15,26 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 
 ### Plan summary (from EXPERIMENT_PLAN_LSI_PYTORCH.md)
 
-- **Widths**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
+- **Widths (by m/n² ratio)**: Here **m** is the **(hidden) layer width** (number of neurons/units in each hidden layer), *not* the number of parameters. With n_train=1024 (n²=1,048,576), the plan targets **m/n² ∈ {0.1, 0.5, 1.0, 5.0}**. In our ResNet, the base layer width (channels) is **m = 64 × width_multiplier** (then 2×, 4×, 8× in deeper stages). Approximate mapping (param counts are for reference only):
+  | Target m/n² | width (mult) | base width m (=64×width) | param_count (≈) |
+  |-------------|--------------|---------------------------|-----------------|
+  | 0.1         | 0.1          | 6                         | ~100k           |
+  | 0.5         | 0.22         | 14                        | ~460k           |
+  | 1.0         | 0.31         | 20                        | ~1.04M          |
+  | 5.0         | 0.69         | 44                        | ~5.28M          |
+  So **widths to run: 0.1, 0.22, 0.31, 0.69** (or round to 0.1, 0.2, 0.3, 0.7 for simplicity). For strict m/n² targets with large m (e.g. m = 0.1×n² ≈ 105k), use width_multiplier = (target_ratio × n²) / 64.
+- **Alternative (legacy)**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
 - **Noise scale**: Default 1.0 (standard ULA). Use `--noise-scale` to override; run `scripts/diagnose_ula.py` to tune for balance.
 - **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train) and pass `--pretrain-path` to run and diagnose.
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.
+
+You can optionally use a **small 2–3 block ResNet with LayerNorm** instead of the default ResNet-18 by passing
+`--arch small_resnet_ln` (and optionally `--num-blocks` for the number of residual blocks) to scripts that accept
+an `--arch` flag (e.g. `scripts/run_single_chain.py`, `scripts/diagnose_ula.py`, `scripts/diagnose_sanity_checks.py`).
+Width is still controlled by `--width` as above.
 
 ### Optional: Pretrain once per (width, n_train) for standardized init
 

@@ -32,7 +32,7 @@ def _get_n1024_loader():
 class TestPotential(unittest.TestCase):
     def test_compute_U_scalar(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = create_model(width_multiplier=0.5).to(device)
+        model = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         train, _ = _get_small_loaders()
         U = compute_U(model, train, alpha=1e-2, device=device)
         self.assertTrue(U.dim() == 0 or U.numel() == 1)
@@ -44,7 +44,7 @@ class TestPotential(unittest.TestCase):
 
     def test_compute_U_gradient_flow(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = create_model(width_multiplier=0.5).to(device)
+        model = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         train, _ = _get_small_loaders()
         U = compute_U(model, train, alpha=1e-2, device=device)
         U.backward()
@@ -60,7 +60,7 @@ class TestPotential(unittest.TestCase):
 class TestULAStep(unittest.TestCase):
     def test_one_step_changes_theta(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = create_model(width_multiplier=0.5).to(device)
+        model = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         train, _ = _get_small_loaders()
         theta0 = flatten_params(model).clone()
         out = ula_step(
@@ -90,13 +90,13 @@ class TestULAStep(unittest.TestCase):
         train_batch = (x, y)
 
         gen = torch.Generator(device=device).manual_seed(12345)
-        model1 = create_model(width_multiplier=0.5).to(device)
+        model1 = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         theta0 = flatten_params(model1).clone()
         ula_step(model1, train_batch, alpha=1e-2, h=1e-5, device=device, noise_scale=0.0, generator=gen)
         out1 = flatten_params(model1).clone()
 
         gen2 = torch.Generator(device=device).manual_seed(12345)
-        model2 = create_model(width_multiplier=0.5).to(device)
+        model2 = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         unflatten_like(theta0.clone(), model2)
         ula_step(model2, train_batch, alpha=1e-2, h=1e-5, device=device, noise_scale=0.0, generator=gen2)
         out2 = flatten_params(model2)
@@ -106,7 +106,7 @@ class TestULAStep(unittest.TestCase):
 class TestSignalToNoise(unittest.TestCase):
     def test_snr_finite_and_positive(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = create_model(width_multiplier=0.5).to(device)
+        model = create_model(width_multiplier=0.5, arch="resnet18").to(device)
         train, _ = _get_small_loaders()
         # Compute gradient of U
         model.zero_grad(set_to_none=True)
@@ -126,7 +126,29 @@ class TestSignalToNoise(unittest.TestCase):
     def test_snr_n1024(self):
         """SNR at n=1024 with default noise_scale (1.0) should be finite and positive."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = create_model(width_multiplier=0.5).to(device)
+        model = create_model(width_multiplier=0.5, arch="resnet18").to(device)
+
+
+class TestULAStepSmallResNetLN(unittest.TestCase):
+    def test_one_step_changes_theta_small_resnet_ln(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = create_model(width_multiplier=0.5, arch="small_resnet_ln", num_blocks=2).to(device)
+        train, _ = _get_small_loaders()
+        theta0 = flatten_params(model).clone()
+        out = ula_step(
+            model,
+            train,
+            alpha=1e-2,
+            h=1e-5,
+            device=device,
+            noise_scale=0.1,
+            return_U=True,
+        )
+        theta_after = flatten_params(model)
+        self.assertFalse(torch.allclose(theta_after, theta0))
+        self.assertIn("U", out)
+        u_val = out["U"]
+        self.assertTrue(torch.isfinite(torch.tensor(u_val)).item())
         train, _ = _get_n1024_loader()
         model.zero_grad(set_to_none=True)
         U = compute_U(model, train, alpha=1e-2, device=device)

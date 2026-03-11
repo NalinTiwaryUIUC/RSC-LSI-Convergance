@@ -95,6 +95,8 @@ def run_chain(
     model = create_model(
         width_multiplier=config.width_multiplier,
         num_classes=config.num_classes,
+        arch=getattr(config, "arch", "resnet18"),
+        num_blocks=getattr(config, "num_blocks", 2),
     ).to(device)
     d = flatten_params(model).numel()
     config.param_count = d

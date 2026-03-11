@@ -39,6 +39,8 @@ class RunConfig:
     # Model
     width_multiplier: float = 1.0
     num_classes: int = 10
+    arch: str = "resnet18"
+    num_blocks: int = 2
 
     # ULA
     h: float = 1e-4  # larger steps for more movement

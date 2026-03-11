@@ -70,7 +70,7 @@ def _partition_test(model, x_full, y_full, alpha, device, n_train, bn_mode):
     return diff_U, grad_diff_rel
 
 
-def run_t1(n_train=1024, width=0.1, alpha=0.1, h=1e-9, seed=42, steps=200, checkpoints=None):
+def run_t1(n_train=1024, width=0.1, alpha=0.1, h=1e-9, seed=42, steps=200, checkpoints=None, arch: str = "resnet18", num_blocks: int = 2):
     """T1: Partition invariance at checkpoints 0, 100, 200."""
     if checkpoints is None:
         checkpoints = (0, min(100, steps // 2), steps)
@@ -86,7 +86,7 @@ def run_t1(n_train=1024, width=0.1, alpha=0.1, h=1e-9, seed=42, steps=200, check
     x_full, y_full = x_full.to(device), y_full.to(device)
     train_data = (x_full, y_full)
 
-    model = create_model(width_multiplier=width).to(device)
+    model = create_model(width_multiplier=width, arch=arch, num_blocks=num_blocks).to(device)
     model.train()
     opt = torch.optim.SGD(model.parameters(), lr=0.02)
     for _ in range(50):
@@ -139,7 +139,7 @@ def run_t2():
         return False, f"Wrong error: {e}"
 
 
-def run_t3(n_train=1024, width=0.1, h=1e-9, alpha=0.1, seed=42, steps=2000):
+def run_t3(n_train=1024, width=0.1, h=1e-9, alpha=0.1, seed=42, steps=2000, arch: str = "resnet18", num_blocks: int = 2):
     """T3: Two chains (eval vs batchstat_frozen), compare drift metrics."""
     import tempfile
     tmp = Path(tempfile.mkdtemp(prefix="rsc_t3_"))
@@ -173,7 +173,7 @@ def run_t3(n_train=1024, width=0.1, h=1e-9, alpha=0.1, seed=42, steps=2000):
     return runs, None
 
 
-def run_t4(n_train=1024, width=0.1, alpha=0.1, seed=42, pretrain_steps=50):
+def run_t4(n_train=1024, width=0.1, alpha=0.1, seed=42, pretrain_steps=50, arch: str = "resnet18", num_blocks: int = 2):
     """
     Same θ (one checkpoint loaded once), same data subset, same partitioning (one-shot n_train).
     Compute grad_norm under eval vs batchstat_frozen. If ratio ~11× → real modeling difference.
@@ -190,7 +190,7 @@ def run_t4(n_train=1024, width=0.1, alpha=0.1, seed=42, pretrain_steps=50):
     x_full, y_full = next(iter(loader))
     x_full, y_full = x_full.to(device), y_full.to(device)
 
-    model = create_model(width_multiplier=width).to(device)
+    model = create_model(width_multiplier=width, arch=arch, num_blocks=num_blocks).to(device)
     model.train()
     opt = torch.optim.SGD(model.parameters(), lr=0.02)
     for _ in range(pretrain_steps):

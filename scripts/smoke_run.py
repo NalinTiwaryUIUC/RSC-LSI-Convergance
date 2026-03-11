@@ -38,6 +38,8 @@ def main() -> None:
         chain_seed=0,
         dataset_seed=defaults.dataset_seed,
         data_dir=defaults.data_dir,
+        arch=defaults.arch,
+        num_blocks=defaults.num_blocks,
     )
     train_loader = get_train_loader(
         config.n_train,
@@ -49,7 +51,12 @@ def main() -> None:
         eval_transform=True,
     )
     # Quick signal-to-noise ratio diagnostic at the starting point
-    model = create_model(width_multiplier=config.width_multiplier).to(device)
+    model = create_model(
+        width_multiplier=config.width_multiplier,
+        num_classes=config.num_classes,
+        arch=config.arch,
+        num_blocks=config.num_blocks,
+    ).to(device)
     x_train, y_train = next(iter(train_loader))
     x_train = x_train.to(device, non_blocking=True)
     y_train = y_train.to(device, non_blocking=True)

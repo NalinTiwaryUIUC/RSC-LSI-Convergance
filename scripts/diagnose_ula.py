@@ -69,6 +69,8 @@ def main() -> None:
         pretrain_lr=args.pretrain_lr if args.pretrain_lr is not None else _cfg.pretrain_lr,
         dataset_seed=args.seed if args.seed is not None else _cfg.dataset_seed,
         data_dir=args.data_dir if args.data_dir is not None else _cfg.data_dir,
+        arch=_cfg.arch,
+        num_blocks=_cfg.num_blocks,
     )
     alpha = args.alpha if args.alpha is not None else config.alpha
     noise_scale = args.noise_scale if args.noise_scale is not None else config.noise_scale
@@ -89,7 +91,12 @@ def main() -> None:
     y_train = y_train.to(device, non_blocking=True)
     train_data = (x_train, y_train)
 
-    model = create_model(width_multiplier=config.width_multiplier).to(device)
+    model = create_model(
+        width_multiplier=config.width_multiplier,
+        num_classes=config.num_classes,
+        arch=config.arch,
+        num_blocks=config.num_blocks,
+    ).to(device)
     d = flatten_params(model).numel()
 
     if args.pretrain_path:

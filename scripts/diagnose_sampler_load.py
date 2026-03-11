@@ -49,7 +49,14 @@ def main() -> int:
 
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
     width = ckpt.get("width", 1.0)
-    model = create_model(width_multiplier=width).to(device)
+    arch = ckpt.get("arch", "resnet18")
+    num_blocks = ckpt.get("num_blocks", 2)
+    model = create_model(
+        width_multiplier=width,
+        num_classes=10,
+        arch=arch,
+        num_blocks=num_blocks,
+    ).to(device)
     model.load_state_dict(ckpt["state_dict"], strict=True)
 
     if args.run in (2, 3):
