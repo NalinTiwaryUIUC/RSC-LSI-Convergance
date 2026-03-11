@@ -1,4 +1,18 @@
 #!/bin/bash
+#SBATCH --job-name=lsi_ula
+#SBATCH --time=48:00:00                    # Job run time (hh:mm:ss) - 48h for full T=200k chain
+#SBATCH --mail-type=ALL,FAIL
+#SBATCH --mail-user="nalint2@illinois.edu"  # Email when job starts/finishes/fails
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --account=arindamb-cs-eng
+#SBATCH --partition=eng-research-gpu
+#SBATCH --output=logs/lsi_ula/lsi_ula_%j.out
+#SBATCH --error=logs/lsi_ula/lsi_ula_%j.err
+
 #
 # Run SGD pretraining (scripts/pretrain.py) with logging. Use from project root.
 #
