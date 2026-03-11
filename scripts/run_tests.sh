@@ -3,18 +3,88 @@
 # Run unit tests, regression suite, and optional smoke run with clear pass/fail
 # logging and diagnostics. Use from project root: ./scripts/run_tests.sh
 #
-# Options (env):
-#   QUICK=1              Use --quick for regression suite (default: 1)
-#   SKIP_SMOKE=1         Skip smoke run (faster; default: 0)
-#   RUN_EXTRA=1          Run extra diagnostics (diagnose_sanity_checks, test_partition_invariance; default: 0)
-#   REGRESSION_SECTIONS  Comma-separated section list, e.g. "3,4,7,8,9" (default: all)
+# Options (pass in-line):
+#   --extra               Run extra diagnostics (diagnose_sanity_checks, test_partition_invariance)
+#   --no-extra            Skip extra diagnostics (default)
+#   --quick                Regression suite with --quick, faster (default)
+#   --no-quick, --full     Regression suite without --quick, full runs
+#   --skip-smoke           Skip smoke run
+#   --regression-sections 1,2,3   Run only these sections (default: all)
+#   --log-dir DIR         Log directory (default: logs/run_tests)
+#   -h, --help            Show this help and exit
 #
 # Examples:
 #   ./scripts/run_tests.sh
-#   QUICK=0 ./scripts/run_tests.sh
-#   SKIP_SMOKE=1 REGRESSION_SECTIONS=3,4,7 ./scripts/run_tests.sh
+#   ./scripts/run_tests.sh --extra --no-quick
+#   ./scripts/run_tests.sh --extra --skip-smoke --regression-sections 3,4,7
+#   sbatch scripts/run_tests.sh --extra --no-quick
 #
 # We do not use set -e so that all phases run and we report a full summary.
+
+# Defaults (overridden by in-line args below)
+QUICK=1
+SKIP_SMOKE=0
+RUN_EXTRA=0
+REGRESSION_SECTIONS=all
+LOG_DIR=logs/run_tests
+
+# Parse in-line arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --extra)
+            RUN_EXTRA=1
+            shift
+            ;;
+        --no-extra)
+            RUN_EXTRA=0
+            shift
+            ;;
+        --quick)
+            QUICK=1
+            shift
+            ;;
+        --no-quick|--full)
+            QUICK=0
+            shift
+            ;;
+        --skip-smoke)
+            SKIP_SMOKE=1
+            shift
+            ;;
+        --regression-sections)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "run_tests.sh: --regression-sections requires a value (e.g. 1,2,3 or all)" >&2
+                exit 1
+            fi
+            REGRESSION_SECTIONS="$2"
+            shift 2
+            ;;
+        --log-dir)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "run_tests.sh: --log-dir requires a path" >&2
+                exit 1
+            fi
+            LOG_DIR="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS]"
+            echo "  --extra              Run extra diagnostics (diagnose_sanity_checks, test_partition_invariance)"
+            echo "  --no-extra           Skip extra diagnostics (default)"
+            echo "  --quick              Regression with --quick (default)"
+            echo "  --no-quick, --full   Regression without --quick"
+            echo "  --skip-smoke         Skip smoke run"
+            echo "  --regression-sections 1,2,3   Only these sections (default: all)"
+            echo "  --log-dir DIR        Log directory (default: logs/run_tests)"
+            echo "  -h, --help           Show this help"
+            exit 0
+            ;;
+        *)
+            echo "run_tests.sh: unknown option: $1 (use --help)" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Project root
 if [ -n "$RSC_CONV_DIR" ]; then
@@ -28,7 +98,6 @@ fi
 cd "$PROJ_DIR" || { echo "ERROR: Cannot cd to $PROJ_DIR"; exit 1; }
 
 # Log dir and timestamped log file
-LOG_DIR="${LOG_DIR:-logs/run_tests}"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/run_tests_${TIMESTAMP}.log"
@@ -101,8 +170,6 @@ if run_phase "Unit tests (data, model, ULA, probes, chain)" "$UNIT_CMD" \
 fi
 
 # --- Phase 2: Regression suite ---
-QUICK="${QUICK:-1}"
-REGRESSION_SECTIONS="${REGRESSION_SECTIONS:-all}"
 if [ "$REGRESSION_SECTIONS" = "all" ]; then
     REGRESS_CMD="python3 scripts/run_regression_suite.py --all"
 else
@@ -119,7 +186,7 @@ if run_phase "Regression suite (sections=${REGRESSION_SECTIONS}, quick=${QUICK})
 fi
 
 # --- Phase 3: Extra diagnostics (optional) ---
-if [ "${RUN_EXTRA:-0}" = "1" ]; then
+if [ "$RUN_EXTRA" = "1" ]; then
     EXTRA_CMD1="python3 scripts/diagnose_sanity_checks.py 2>&1"
     EXTRA_CMD2="python3 scripts/test_partition_invariance.py 2>&1"
     log ""
@@ -142,15 +209,15 @@ if [ "${RUN_EXTRA:-0}" = "1" ]; then
     fi
 else
     log ""
-    log "Phase: Extra diagnostics (skipped, set RUN_EXTRA=1 to run)"
+    log "Phase: Extra diagnostics (skipped, use --extra to run)"
     EXTRA_PASS=1
 fi
 
 # --- Phase 4: Smoke run (optional) ---
-if [ "${SKIP_SMOKE:-0}" = "1" ]; then
+if [ "$SKIP_SMOKE" = "1" ]; then
     log ""
     log "=============================================="
-    log "Phase: Smoke run (SKIP_SMOKE=1, skipped)"
+    log "Phase: Smoke run (--skip-smoke, skipped)"
     log "=============================================="
     SMOKE_PASS=1
 else
@@ -176,7 +243,7 @@ FAILED=0
 [ $UNIT_PASS -eq 0 ] && { log "Unit tests failed. See $LOG_FILE"; FAILED=1; }
 [ $REGRESS_PASS -eq 0 ] && { log "Regression suite failed. See $LOG_FILE (sections and diagnostics)"; FAILED=1; }
 [ $EXTRA_PASS -eq 0 ] && { log "Extra diagnostics failed. See $LOG_FILE"; FAILED=1; }
-[ $SMOKE_PASS -eq 0 ] && [ "${SKIP_SMOKE:-0}" != "1" ] && { log "Smoke run failed. See $LOG_FILE"; FAILED=1; }
+[ $SMOKE_PASS -eq 0 ] && [ "$SKIP_SMOKE" != "1" ] && { log "Smoke run failed. See $LOG_FILE"; FAILED=1; }
 
 log "Full log: $LOG_FILE"
 log "=== Test run finished at $(date) ==="
