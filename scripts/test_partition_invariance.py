@@ -229,6 +229,8 @@ def main():
     p.add_argument("--steps", type=int, default=200, help="T1/T3 chain steps")
     args = p.parse_args()
 
+    any_fail = False
+
     if args.test in ("t1", "all"):
         print("=" * 60)
         print("T1: Partition invariance at checkpoints 0, 100, 200")
@@ -239,7 +241,11 @@ def main():
             for row in r[mode]:
                 print(f"  step {row['step']}: ΔU={row['diff_U']:.6f}, grad_diff_rel={row['grad_diff_rel']:.6f}")
             passes = all(row["grad_diff_rel"] < 1e-3 for row in r[mode])
-            print(f"  -> {'PASS (all < 1e-3)' if passes else 'FAIL'}")
+            if not passes:
+                any_fail = True
+                print(f"  -> FAIL (grad_diff_rel should be < 1e-3; check BN partition vs one-shot)")
+            else:
+                print(f"  -> PASS (all < 1e-3)")
         print()
 
     if args.test in ("t2", "all"):
@@ -248,7 +254,11 @@ def main():
         print("=" * 60)
         ok, msg = run_t2()
         print(f"  {msg}")
-        print(f"  -> {'PASS' if ok else 'FAIL'}")
+        if not ok:
+            any_fail = True
+            print(f"  -> FAIL")
+        else:
+            print(f"  -> PASS")
         print()
 
     if args.test in ("t3", "all"):
@@ -258,6 +268,7 @@ def main():
         runs, err = run_t3(n_train=args.n_train, width=args.width, steps=args.steps)
         if err:
             print(f"  ERROR: {err}")
+            any_fail = True
         else:
             metrics = ["U_data", "grad_norm", "act_max_abs", "nll_probe_mean"]
             for m in metrics:
@@ -281,6 +292,13 @@ def main():
             print("  -> Ratio collapsed: T3 difference likely from different θ / evaluation path.")
         print()
 
+    print("=" * 60)
+    if any_fail:
+        print("Overall: FAIL (at least one of T1/T2/T3 failed)")
+        return 1
+    print("Overall: PASS")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

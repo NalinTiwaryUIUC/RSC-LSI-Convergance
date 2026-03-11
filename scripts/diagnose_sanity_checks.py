@@ -317,14 +317,18 @@ def main():
 
     # Test 2: Gradient determinism
     print("2) GRADIENT DETERMINISM (same θ, two U/grad evals)")
+    r2_pass = True
     for bn_mode in ["eval", "batchstat_frozen"]:
         if bn_mode == "eval":
             model.eval()
         else:
             set_bn_batchstats_freeze_buffers(model)
         r2 = test2_gradient_determinism(model, train_data, args.alpha, device, "sum")
+        r2_pass = r2_pass and r2["pass"]
         status = "PASS" if r2["pass"] else "FAIL"
         print(f"   bn_mode={bn_mode}: diff_U={r2['diff_U']:.2e}, diff_grad_rel={r2['diff_grad_rel']:.2e} -> {status}")
+        if not r2["pass"]:
+            print(f"      Diagnostic: non-deterministic U/grad; check CUDNN/cuda seeds and non-deterministic ops.")
     print()
 
     # Test 3: Noise scaling
@@ -361,6 +365,24 @@ def main():
 
     print()
     print("=" * 70)
+    failed = []
+    if not all(v.get("pass", False) for v in r1.values()):
+        failed.append("1(BN partition)")
+    if not r2_pass:
+        failed.append("2(grad determinism)")
+    if not r3.get("pass", False):
+        failed.append("3(noise scaling)")
+    if not r4.get("pass", False):
+        failed.append("4(CE sum vs mean)")
+    if not r5.get("pass", False):
+        failed.append("5(prior correctness)")
+    if not r6.get("pass", False):
+        failed.append("6(BN buffer frozen)")
+    all_pass = len(failed) == 0
+    if failed:
+        print(f"Overall: FAIL (checks {', '.join(failed)} failed)")
+        return 1
+    print("Overall: PASS")
     return 0
 
 

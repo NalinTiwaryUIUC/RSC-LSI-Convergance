@@ -1,8 +1,10 @@
 """
 Smoke run: short chain to validate pipeline (T=500, B=100, S=50, n=128, w=0.5, 1 chain).
+Exits with 1 if run_chain fails or outputs are invalid (missing files, non-finite metrics).
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from config import RunConfig, ensure_directories, get_device
 from data import get_probe_loader, get_train_loader
 from models import create_model
 from run.chain import run_chain
+from run.persistence import load_run_config
 from ula.potential import compute_U
 import torch
 
@@ -87,7 +90,43 @@ def main() -> None:
         train_loader=train_loader, probe_loader=probe_loader, device=device,
     )
     print("Smoke run done:", run_dir)
+
+    # Post-run validation: fail with clear diagnostics if outputs are bad
+    required = ["run_config.yaml", "iter_metrics.jsonl", "samples_metrics.npz"]
+    missing = [f for f in required if not (run_dir / f).exists()]
+    if missing:
+        print(f"FAIL: missing outputs: {missing}. Check run_chain for errors.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        loaded = load_run_config(run_dir)
+        if loaded.T != config.T or loaded.B != config.B or loaded.S != config.S:
+            print(
+                f"FAIL: config mismatch: T/B/S = {loaded.T},{loaded.B},{loaded.S} vs expected {config.T},{config.B},{config.S}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    except Exception as e:
+        print(f"FAIL: could not load run_config: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    lines = (run_dir / "iter_metrics.jsonl").read_text().strip().splitlines()
+    if not lines:
+        print("FAIL: iter_metrics.jsonl is empty.", file=sys.stderr)
+        sys.exit(1)
+    first = json.loads(lines[0])
+    last = json.loads(lines[-1])
+    for name, rec in [("first", first), ("last", last)]:
+        u = rec.get("U_train")
+        if u is None:
+            print(f"FAIL: U_train missing in {name} line of iter_metrics.", file=sys.stderr)
+            sys.exit(1)
+        if not (isinstance(u, (int, float)) and abs(u) != float("inf") and u == u):
+            print(f"FAIL: U_train non-finite in {name} line: {u}. Check for NaNs/explosion in chain.", file=sys.stderr)
+            sys.exit(1)
+
     print("Check run_config.yaml, iter_metrics.jsonl, samples_metrics.npz")
+    print("Smoke run PASS: outputs present and metrics finite.")
 
 
 if __name__ == "__main__":
