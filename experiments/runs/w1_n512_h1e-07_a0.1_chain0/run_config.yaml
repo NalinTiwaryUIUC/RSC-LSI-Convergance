@@ -13,13 +13,13 @@ ce_reduction: sum
 temperature: 1.0
 noise_scale: 1.0
 clip_grad_norm: null
-log_every: 10
+log_every: 100
 progress_print_every: 10000
 pretrain_steps: 2000
 pretrain_lr: 0.02
-T: 5000
-B: 0
-S: 10
+T: 200000
+B: 10000
+S: 500
 K: 4
 sigma_init_scale: 0.0001
 grad_norm_stride: 5
