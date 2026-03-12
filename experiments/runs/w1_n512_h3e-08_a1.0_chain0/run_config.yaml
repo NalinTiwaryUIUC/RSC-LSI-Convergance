@@ -7,8 +7,8 @@ width_multiplier: 1.0
 num_classes: 10
 arch: small_resnet_ln
 num_blocks: 2
-h: 1.0e-07
-alpha: 0.1
+h: 3.0e-08
+alpha: 1.0
 ce_reduction: sum
 temperature: 1.0
 noise_scale: 1.0
@@ -17,9 +17,9 @@ log_every: 100
 progress_print_every: 10000
 pretrain_steps: 2000
 pretrain_lr: 0.02
-T: 200000
-B: 10000
-S: 500
+T: 30000
+B: 0
+S: 100
 K: 4
 sigma_init_scale: 0.0001
 grad_norm_stride: 5
@@ -31,9 +31,9 @@ dataset_seed: 42
 chain_seed: 42
 probe_projection_seed: 12345
 chain_id: 0
-run_dir: experiments/runs/w1_n512_h1e-07_a0.1_chain0
+run_dir: experiments/runs/w1_n512_h3e-08_a1.0_chain0
 param_count: 150474
-ou_radius_pred: 1226.6784419724675
+ou_radius_pred: 387.9097833259687
 effective_batch_size: 512
 num_microbatches: 1
 microbatch_size: 512
