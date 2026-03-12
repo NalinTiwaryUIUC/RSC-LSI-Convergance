@@ -49,13 +49,7 @@ echo "=== Job ID: $SLURM_JOB_ID ==="
 echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA ==="
 echo "=== Working directory: $PROJ_DIR ==="
 
-echo "=== GPU Information ==="
-nvidia-smi 2>/dev/null || echo "nvidia-smi not available"
-echo "=== Memory Information ==="
-free -h 2>/dev/null || true
-echo "=== Python Version ==="
-python3 --version
-
+# Activate venv first so all python3/pip commands use it (avoids ModuleNotFoundError for torch)
 echo "=== Setting up environment ==="
 if [ -d ".venv" ]; then
     source .venv/bin/activate
@@ -75,6 +69,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo "=== GPU Information ==="
+nvidia-smi 2>/dev/null || echo "nvidia-smi not available"
+echo "=== Memory Information ==="
+free -h 2>/dev/null || true
+echo "=== Python Version ==="
+python3 --version
 echo "=== Verifying PyTorch and GPU ==="
 python3 -c "
 import torch

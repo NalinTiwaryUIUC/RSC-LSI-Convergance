@@ -366,7 +366,9 @@ def main():
     print()
     print("=" * 70)
     failed = []
-    if not all(v.get("pass", False) for v in r1.values()):
+    # Check 1: we only fail if eval is not partition-invariant. batchstat_frozen showing large Δ
+    # is expected (partition-sensitive); the test documents that you must use full-batch then.
+    if not r1.get("eval", {}).get("pass", True):
         failed.append("1(BN partition)")
     if not r2_pass:
         failed.append("2(grad determinism)")

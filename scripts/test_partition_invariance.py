@@ -242,8 +242,11 @@ def main():
                 print(f"  step {row['step']}: ΔU={row['diff_U']:.6f}, grad_diff_rel={row['grad_diff_rel']:.6f}")
             passes = all(row["grad_diff_rel"] < 1e-3 for row in r[mode])
             if not passes:
-                any_fail = True
-                print(f"  -> FAIL (grad_diff_rel should be < 1e-3; check BN partition vs one-shot)")
+                if mode == "eval":
+                    any_fail = True
+                    print(f"  -> FAIL (grad_diff_rel should be < 1e-3; check BN partition vs one-shot)")
+                else:
+                    print(f"  -> FAIL (expected for batchstat_frozen: partition-sensitive; use full-batch in runs)")
             else:
                 print(f"  -> PASS (all < 1e-3)")
         print()

@@ -79,7 +79,7 @@ log() {
     echo "$@" | tee -a "$LOG_FILE"
 }
 
-# Activate venv if present
+# Activate venv first so Python/PyTorch checks and all commands use it
 if [ -d ".venv" ]; then
     source .venv/bin/activate
     log "Using .venv"

@@ -151,6 +151,15 @@ REGRESS_PASS=0
 SMOKE_PASS=0
 EXTRA_PASS=0
 
+# Activate venv first so Python/PyTorch checks and all phases use it
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+    log "Using .venv"
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+    log "Using venv"
+fi
+
 log "=== Test run started at $(date) ==="
 log "=== Working directory: $PROJ_DIR ==="
 log "=== Python ==="
@@ -163,15 +172,6 @@ print('CUDA available:', torch.cuda.is_available())
 if torch.cuda.is_available():
     print('Device:', torch.cuda.get_device_name(0))
 " 2>&1 | tee -a "$LOG_FILE" || true
-
-# Activate venv if present
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
-    log "Using .venv"
-elif [ -d "venv" ]; then
-    source venv/bin/activate
-    log "Using venv"
-fi
 
 # Optional: install deps (uncomment if you want this in CI)
 # pip3 install -q -r requirements.txt || true
@@ -220,6 +220,7 @@ if [ "$RUN_EXTRA" = "1" ]; then
     else
         log "Result: FAIL"
         log "Diagnostic: Check BN partition, gradient determinism, noise scaling, partition invariance in $LOG_FILE"
+        log "Note: If only 'BN partition batchstat_frozen' failed, that is expected: use full-batch or bn_mode=eval in runs."
     fi
 else
     log ""
