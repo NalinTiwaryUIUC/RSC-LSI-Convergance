@@ -1,0 +1,39 @@
+Log file: logs/chain/chain_20260311_214725.log
+Using .venv
+=== Chain run started at Wed Mar 11 21:47:25 CDT 2026 ===
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== Python ===
+Python 3.9.21
+=== PyTorch / GPU ===
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+
+==============================================
+Command: python3 scripts/run_single_chain.py --arch small_resnet_ln --num-blocks 2 --width 1 --n_train 512 --alpha 0.1 --h 1e-7 --T 200000 --B 10000 --S 500 --log-every 100 --bn-mode eval --chain 0 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt
+==============================================
+chain 0 step 10000/200000 (5.0%) U=201.2 ||∇U||=803.2 ||θ||=35 f_nll=139.573
+chain 0 step 20000/200000 (10.0%) U=275.0 ||∇U||=1020.2 ||θ||=39 f_nll=198.884
+chain 0 step 30000/200000 (15.0%) U=333.1 ||∇U||=992.2 ||θ||=43 f_nll=241.325
+chain 0 step 40000/200000 (20.0%) U=392.9 ||∇U||=918.4 ||θ||=46 f_nll=287.232
+chain 0 step 50000/200000 (25.0%) U=431.6 ||∇U||=1240.5 ||θ||=49 f_nll=310.559
+chain 0 step 60000/200000 (30.0%) U=476.5 ||∇U||=762.8 ||θ||=52 f_nll=340.461
+chain 0 step 70000/200000 (35.0%) U=533.4 ||∇U||=1236.9 ||θ||=55 f_nll=382.581
+chain 0 step 80000/200000 (40.0%) U=558.7 ||∇U||=973.1 ||θ||=58 f_nll=392.889
+chain 0 step 90000/200000 (45.0%) U=606.9 ||∇U||=944.1 ||θ||=60 f_nll=424.788
+chain 0 step 100000/200000 (50.0%) U=630.5 ||∇U||=1158.6 ||θ||=63 f_nll=434.171
+chain 0 step 110000/200000 (55.0%) U=669.3 ||∇U||=682.4 ||θ||=65 f_nll=458.083
+chain 0 step 120000/200000 (60.0%) U=695.3 ||∇U||=1289.6 ||θ||=67 f_nll=468.198
+chain 0 step 130000/200000 (65.0%) U=709.5 ||∇U||=743.4 ||θ||=70 f_nll=467.817
+chain 0 step 140000/200000 (70.0%) U=742.2 ||∇U||=774.5 ||θ||=72 f_nll=485.942
+chain 0 step 150000/200000 (75.0%) U=768.6 ||∇U||=1256.1 ||θ||=74 f_nll=497.852
+chain 0 step 160000/200000 (80.0%) U=804.4 ||∇U||=805.4 ||θ||=76 f_nll=518.629
+chain 0 step 170000/200000 (85.0%) U=831.3 ||∇U||=996.3 ||θ||=78 f_nll=530.303
+chain 0 step 180000/200000 (90.0%) U=827.2 ||∇U||=976.3 ||θ||=80 f_nll=510.302
+chain 0 step 190000/200000 (95.0%) U=863.3 ||∇U||=809.9 ||θ||=82 f_nll=531.314
+chain 0 step 200000/200000 (100.0%) U=898.8 ||∇U||=1068.2 ||θ||=83 f_nll=551.493
+Done: experiments/runs/w1_n512_h1e-07_a0.1_chain0
+
+=== Chain run finished at Thu Mar 12 02:18:28 CDT 2026 ===
+Exit code: 0
+SUCCESS: chain completed. See runs_dir for run_config.yaml, iter_metrics.jsonl, samples_metrics.npz.

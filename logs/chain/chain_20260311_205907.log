@@ -1,0 +1,36 @@
+Log file: logs/chain/chain_20260311_205907.log
+=== Chain run started at Wed Mar 11 20:59:07 CDT 2026 ===
+Using .venv
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== Python ===
+=== Chain run started at Wed Mar 11 20:59:07 CDT 2026 ===
+Python 3.9.21
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== PyTorch / GPU ===
+=== Python ===
+Python 3.9.21
+=== PyTorch / GPU ===
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+
+==============================================
+Command: python3 scripts/run_single_chain.py --arch small_resnet_ln --num-blocks 2 --width 1 --n_train 512 --h 1e-8 --T 5000 --B 0 --S 10 --log-every 10 --alpha 0.1 --bn-mode eval --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt
+==============================================
+
+==============================================
+Command: python3 scripts/run_single_chain.py --arch small_resnet_ln --num-blocks 2 --width 1 --n_train 512 --h 3e-8 --T 5000 --B 0 --S 10 --log-every 10 --alpha 0.1 --bn-mode eval --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt
+==============================================
+Done: experiments/runs/w1_n512_h1e-08_a0.1_chain0
+
+=== Chain run finished at Wed Mar 11 21:07:32 CDT 2026 ===
+Exit code: 0
+SUCCESS: chain completed. See runs_dir for run_config.yaml, iter_metrics.jsonl, samples_metrics.npz.
+Done: experiments/runs/w1_n512_h3e-08_a0.1_chain0
+
+=== Chain run finished at Wed Mar 11 21:07:35 CDT 2026 ===
+Exit code: 0
+SUCCESS: chain completed. See runs_dir for run_config.yaml, iter_metrics.jsonl, samples_metrics.npz.
