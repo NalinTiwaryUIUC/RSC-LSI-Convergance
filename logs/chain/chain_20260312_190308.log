@@ -1,0 +1,21 @@
+Log file: logs/chain/chain_20260312_190308.log
+Using .venv
+=== Chain run started at Thu Mar 12 19:03:08 CDT 2026 ===
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== Python ===
+Python 3.9.21
+=== PyTorch / GPU ===
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+
+==============================================
+Command: python3 scripts/run_single_chain.py --arch small_resnet_ln --num-blocks 2 --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --T 20000 --B 2000 --S 500 --log-every 100 --chain 2 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt
+==============================================
+chain 2 step 10000/20000 (50.0%) U=265.4 ||∇U||=782.7 ||θ||=33 f_nll=104.154
+chain 2 step 20000/20000 (100.0%) U=319.4 ||∇U||=1013.4 ||θ||=35 f_nll=136.166
+Done: experiments/runs/w1_n512_h5e-08_a0.3_chain2
+
+=== Chain run finished at Thu Mar 12 19:31:08 CDT 2026 ===
+Exit code: 0
+SUCCESS: chain completed. See runs_dir for run_config.yaml, iter_metrics.jsonl, samples_metrics.npz.
