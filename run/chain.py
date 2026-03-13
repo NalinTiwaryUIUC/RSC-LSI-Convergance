@@ -37,12 +37,13 @@ def _pretrain_model(
     train_data: Union[torch.utils.data.DataLoader, tuple[torch.Tensor, torch.Tensor]],
     steps: int,
     lr: float,
+    weight_decay: float,
     device: torch.device,
 ) -> None:
     """Simple full-batch SGD pretraining before ULA."""
     if steps <= 0:
         return
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
     if isinstance(train_data, tuple):
         x, y = train_data
     else:
@@ -131,6 +132,7 @@ def run_chain(
             train_data,
             steps=config.pretrain_steps,
             lr=config.pretrain_lr,
+            weight_decay=getattr(config, "pretrain_weight_decay", 0.0),
             device=device,
         )
 

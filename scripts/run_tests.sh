@@ -148,6 +148,8 @@ run_phase() {
 # Track results
 UNIT_PASS=0
 REGRESS_PASS=0
+DRIFT_PASS=0
+MOMENT_PASS=0
 SMOKE_PASS=0
 EXTRA_PASS=0
 
@@ -199,7 +201,21 @@ if run_phase "Regression suite (sections=${REGRESSION_SECTIONS}, quick=${QUICK})
     REGRESS_PASS=1
 fi
 
-# --- Phase 3: Extra diagnostics (optional) ---
+# --- Phase 3: Deterministic drift test (noise_scale=0.0) ---
+DRIFT_CMD="python3 scripts/run_deterministic_drift.py --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --T 20000 --B 0 --S 1 --log-every 100 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt 2>&1"
+DRIFT_HINT="Check experiments/runs/w1_n512_h5e-08_a0.3_det_chain0/iter_metrics.jsonl for drift-only diagnostics (U_train, ce_mean_train, dist_to_ref, theta_norm, etc.)."
+if run_phase "Deterministic drift test (noise_scale=0.0, T=20000)" "$DRIFT_CMD" "$DRIFT_HINT"; then
+    DRIFT_PASS=1
+fi
+
+# --- Phase 4: One-step ULA moment test ---
+MOMENT_CMD="python3 scripts/test_one_step_moments.py --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --reps 512 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt 2>&1"
+MOMENT_HINT="See experiments/runs/one_step_moment_w1_n512_h5e-08_a0.3.json for projection/coordinate mean-variance diagnostics."
+if run_phase "ULA one-step moment test (theta0 fixed at pretrained m=64)" "$MOMENT_CMD" "$MOMENT_HINT"; then
+    MOMENT_PASS=1
+fi
+
+# --- Phase 5: Extra diagnostics (optional) ---
 if [ "$RUN_EXTRA" = "1" ]; then
     EXTRA_CMD1="python3 scripts/diagnose_sanity_checks.py 2>&1"
     EXTRA_CMD2="python3 scripts/test_partition_invariance.py 2>&1"
@@ -228,7 +244,7 @@ else
     EXTRA_PASS=1
 fi
 
-# --- Phase 4: Smoke run (optional) ---
+# --- Phase 6: Smoke run (optional) ---
 if [ "$SKIP_SMOKE" = "1" ]; then
     log ""
     log "=============================================="
@@ -250,6 +266,8 @@ log "Summary"
 log "=============================================="
 log "Unit tests:    $([ $UNIT_PASS -eq 1 ] && echo 'PASS' || echo 'FAIL')"
 log "Regression:    $([ $REGRESS_PASS -eq 1 ] && echo 'PASS' || echo 'FAIL')"
+log "Drift test:    $([ $DRIFT_PASS -eq 1 ] && echo 'PASS' || echo 'FAIL')"
+log "One-step test: $([ $MOMENT_PASS -eq 1 ] && echo 'PASS' || echo 'FAIL')"
 log "Extra diag:    $([ $EXTRA_PASS -eq 1 ] && echo 'PASS / skipped' || echo 'FAIL')"
 log "Smoke run:     $([ $SMOKE_PASS -eq 1 ] && echo 'PASS' || echo 'FAIL / skipped')"
 log "=============================================="
@@ -257,6 +275,8 @@ log "=============================================="
 FAILED=0
 [ $UNIT_PASS -eq 0 ] && { log "Unit tests failed. See $LOG_FILE"; FAILED=1; }
 [ $REGRESS_PASS -eq 0 ] && { log "Regression suite failed. See $LOG_FILE (sections and diagnostics)"; FAILED=1; }
+[ $DRIFT_PASS -eq 0 ] && { log "Deterministic drift test failed. See $LOG_FILE and the experiments/runs deterministic drift directory."; FAILED=1; }
+[ $MOMENT_PASS -eq 0 ] && { log "One-step ULA moment test failed. See $LOG_FILE and the one_step_moment JSON summary."; FAILED=1; }
 [ $EXTRA_PASS -eq 0 ] && { log "Extra diagnostics failed. See $LOG_FILE"; FAILED=1; }
 [ $SMOKE_PASS -eq 0 ] && [ "$SKIP_SMOKE" != "1" ] && { log "Smoke run failed. See $LOG_FILE"; FAILED=1; }
 

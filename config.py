@@ -55,6 +55,7 @@ class RunConfig:
     progress_print_every: int = 10_000  # print progress to stdout every N steps (0 = disable)
     pretrain_steps: int = 2000  # number of full-batch SGD steps before ULA (more = start nearer a mode)
     pretrain_lr: float = 0.02  # learning rate for pretraining
+    pretrain_weight_decay: float = 0.0  # weight decay for pretraining SGD (0.0 = off; nonzero adds optimizer L2)
     T: int = 200_000
     B: int = 50_000
     S: int = 200

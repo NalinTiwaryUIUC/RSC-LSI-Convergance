@@ -61,9 +61,10 @@ def _pretrain_with_l2(
     alpha: float,
     n_train: int,
     device: torch.device,
+    weight_decay: float = 0.0,
 ) -> None:
     """SGD with ce_mean + 0.5*alpha/n_train*||θ||² (same minimizer as pretrain.py)."""
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
     model.train()
     for _ in range(steps):
         optimizer.zero_grad(set_to_none=True)

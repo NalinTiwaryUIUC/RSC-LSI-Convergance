@@ -33,6 +33,12 @@ def main() -> None:
     p.add_argument("--log-every", type=int, default=_DEFAULTS.log_every, help="Write iter_metrics every N steps (default 1000)")
     p.add_argument("--pretrain-steps", type=int, default=_DEFAULTS.pretrain_steps, help="Full-batch SGD steps before ULA (ignored if --pretrain-path)")
     p.add_argument("--pretrain-lr", type=float, default=_DEFAULTS.pretrain_lr, help="Learning rate for pretraining")
+    p.add_argument(
+        "--pretrain-weight-decay",
+        type=float,
+        default=_DEFAULTS.pretrain_weight_decay,
+        help="Weight decay for pretraining SGD (default 0.0; nonzero adds optimizer L2 term).",
+    )
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
     p.add_argument("--bn-mode", type=str, default=_DEFAULTS.bn_mode, choices=["eval", "batchstat_frozen"],
                    help="BN mode for ULA sampling: eval=frozen running stats (partition-invariant), batchstat_frozen=batch stats+frozen buffers")
@@ -83,6 +89,7 @@ def main() -> None:
         noise_scale=args.noise_scale,
         pretrain_steps=args.pretrain_steps,
         pretrain_lr=args.pretrain_lr,
+        pretrain_weight_decay=args.pretrain_weight_decay,
         data_dir=args.data_dir,
         bn_mode=args.bn_mode,
         bn_calibration_steps=args.bn_calibration_steps,

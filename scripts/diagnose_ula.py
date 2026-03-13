@@ -43,6 +43,12 @@ def main() -> None:
     p.add_argument("--noise-scale", type=float, default=None, help="Langevin noise scale; config default if not set")
     p.add_argument("--pretrain-steps", type=int, default=2000)
     p.add_argument("--pretrain-lr", type=float, default=None, help="SGD lr for pretrain; config default if not set")
+    p.add_argument(
+        "--pretrain-weight-decay",
+        type=float,
+        default=0.0,
+        help="Weight decay for SGD during pretrain in this diagnostic (default 0.0).",
+    )
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips pretrain")
     p.add_argument("--data_dir", type=str, default=None)
     p.add_argument("--root", type=str, default="./data")
@@ -103,7 +109,12 @@ def main() -> None:
         ckpt = torch.load(args.pretrain_path, map_location=device, weights_only=True)
         model.load_state_dict(ckpt["state_dict"], strict=True)
     elif config.pretrain_steps > 0:
-        optimizer = torch.optim.SGD(model.parameters(), lr=config.pretrain_lr, momentum=0.9)
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=config.pretrain_lr,
+            momentum=0.9,
+            weight_decay=args.pretrain_weight_decay,
+        )
         model.train()
         for _ in range(config.pretrain_steps):
             optimizer.zero_grad(set_to_none=True)

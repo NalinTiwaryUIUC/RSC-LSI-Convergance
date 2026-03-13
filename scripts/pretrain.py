@@ -50,7 +50,13 @@ def main() -> None:
     p.add_argument("--n_train", type=int, default=1024, help="Training subset size")
     p.add_argument("--alpha", type=float, default=0.1, help="L2 prior strength (same as chain; scales loss L2 as alpha/n_train)")
     p.add_argument("--pretrain-steps", type=int, default=2000, help="SGD steps")
-    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate (no weight_decay; L2 in loss)")
+    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate (L2 penalty in loss; weight decay optional)")
+    p.add_argument(
+        "--pretrain-weight-decay",
+        type=float,
+        default=0.0,
+        help="Weight decay for SGD during pretraining (default 0.0; nonzero adds optimizer L2 term in addition to explicit loss penalty).",
+    )
     p.add_argument("-o", "--output", type=str, default=None,
                    help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}.pt")
     p.add_argument("--bn-calibration-microbatch", type=int, default=BN_CALIBRATION_MICROBATCH,
@@ -90,8 +96,14 @@ def main() -> None:
         arch=args.arch,
         num_blocks=args.num_blocks,
     ).to(device)
-    # No weight_decay; L2 penalty explicit in loss to match sampling target
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.pretrain_lr, momentum=0.9, weight_decay=0.0)
+    # By default, no weight_decay; L2 penalty is explicit in the loss to match the sampling target.
+    # If pretrain_weight_decay > 0, an optimizer L2 term is also applied.
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=args.pretrain_lr,
+        momentum=0.9,
+        weight_decay=args.pretrain_weight_decay,
+    )
 
     # Objective: ce_mean + 0.5 * (alpha / n_train) * ||θ||² — same minimizer as CE_sum + (α/2)||θ||²
     model.train()
