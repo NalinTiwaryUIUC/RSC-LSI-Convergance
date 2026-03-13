@@ -28,10 +28,10 @@ abort_after_burnin_only: true
 bn_mode: eval
 bn_calibration_steps: 0
 dataset_seed: 42
-chain_seed: 42
+chain_seed: 1042
 probe_projection_seed: 12345
-chain_id: 0
-run_dir: experiments/runs/w1_n512_h5e-08_a0.3_chain0
+chain_id: 1
+run_dir: experiments/runs/w1_n512_h5e-08_a0.3_chain1
 param_count: 150474
 ou_radius_pred: 708.2231286819148
 effective_batch_size: 512
