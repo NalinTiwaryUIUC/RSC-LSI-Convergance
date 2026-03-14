@@ -1,0 +1,142 @@
+Log file: logs/run_tests/run_tests_20260313_212921.log
+Using .venv
+=== Test run started at Fri Mar 13 21:29:21 CDT 2026 ===
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== Python ===
+Python 3.9.21
+=== PyTorch / GPU ===
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+
+==============================================
+Phase: Unit tests (data, model, ULA, probes, chain)
+==============================================
+Command: python3 -m unittest discover tests -v 2>&1
+Hint: Re-run: python3 -m unittest discover tests -v
+test_bn_buffers_unchanged (test_bn_mode.TestBnMode)
+Snapshot before/after N forward passes; max_bn_running_delta should be ~0. ... ok
+test_set_bn_batchstats_freeze_buffers (test_bn_mode.TestBnMode)
+After call: all BN layers have momentum==0, BN in train, Dropout in eval. ... ok
+test_chain_bn_mode_batchstat_frozen (test_chain.TestChainPersistence)
+Chain with bn_mode=batchstat_frozen produces valid outputs. ... ok
+test_chain_bn_mode_eval (test_chain.TestChainPersistence)
+Chain with bn_mode=eval produces valid outputs. ... ok
+test_chain_has_diagnostic_metrics (test_chain.TestChainPersistence)
+First iter_metrics line contains diagnostic keys (theta_max_abs, finite_*, drift_step_norm). ... ok
+test_chain_produces_files (test_chain.TestChainPersistence)
+Short run produces run_config.yaml, iter_metrics.jsonl, samples_metrics.npz. ... ok
+test_probe_indices_same_seed (test_data.TestDataIndices) ... ok
+test_train_subset_indices_same_seed (test_data.TestDataIndices) ... ok
+test_probe_loader_shapes (test_data.TestDataLoaders) ... ok
+test_train_loader_shapes (test_data.TestDataLoaders) ... ok
+test_dump_failure_creates_file (test_failure_dump.TestFailureDump)
+dump_failure creates FAIL_step{N}.pt with model state and payload. ... ok
+test_flatten_unflatten_roundtrip_resnet18 (test_model.TestParams) ... ok
+test_flatten_unflatten_roundtrip_small_resnet_ln (test_model.TestParams) ... ok
+test_param_count_matches_flatten_length_resnet18 (test_model.TestParams) ... ok
+test_param_count_matches_flatten_length_small_resnet_ln (test_model.TestParams) ... ok
+test_forward_shape (test_model.TestResNetCIFAR) ... ok
+test_param_count_scales_with_width (test_model.TestResNetCIFAR) ... ok
+test_forward_shape_small_resnet_ln (test_model.TestSmallResNetLN) ... ok
+test_small_resnet_ln_has_fewer_params_than_resnet18 (test_model.TestSmallResNetLN) ... ok
+test_evaluate_probes_shapes_and_finite (test_probes.TestEvaluateProbes) ... ok
+test_grad_norm_sq_one_probe (test_probes.TestEvaluateProbes) ... ok
+test_compute_U_gradient_flow (test_ula.TestPotential) ... ok
+test_compute_U_scalar (test_ula.TestPotential) ... ok
+test_snr_finite_and_positive (test_ula.TestSignalToNoise) ... ok
+test_snr_n1024 (test_ula.TestSignalToNoise)
+SNR at n=1024 with default noise_scale (1.0) should be finite and positive. ... ok
+test_one_step_changes_theta (test_ula.TestULAStep) ... ok
+test_ula_step_noise_scale_zero_is_deterministic (test_ula.TestULAStep)
+With noise_scale=0 the step is pure gradient descent; same seed => same outcome. ... ok
+test_one_step_changes_theta_small_resnet_ln (test_ula.TestULAStepSmallResNetLN) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 22.341s
+
+OK
+Result: PASS
+
+==============================================
+Phase: Regression suite (sections=all, quick=1)
+==============================================
+Command: python3 scripts/run_regression_suite.py --all --quick
+Hint: Inspect logs/run_tests/run_tests_20260313_212921.log for which section failed. Re-run one section: python3 scripts/run_regression_suite.py --section N. Section 1: check iter_metrics.jsonl for NaNs; Section 3: param count ratio d(64)/d(16) in [10,25]; Section 7: prior gradient = alpha*theta.
+Section 1:   PASS: baseline pipeline, no NaNs, scales and checkpoint load OK
+Section 2:   PASS: same logits, loss, and gradients on repeat
+Section 3:   PASS: output shape OK, d(16)=9978, d(64)=150474, ratio=15.08
+Section 4:   PASS: LN outputs centered, non-degenerate, no explosion
+Section 5:   PASS: loss decreased, accuracy high, checkpoints finite, norms OK
+Section 6:   PASS: zero-step leaves params and U unchanged
+Section 7:   PASS: prior gradient equals alpha*theta
+Section 8:   PASS: empirical variance 2.00e-05 ≈ 2h=2.00e-05
+Section 9:   PASS: round-trip exact for model and after load
+Section 10:   PASS: short ULA pilot, no NaNs, samples saved
+
+Total: 10 passed, 0 failed
+Result: PASS
+
+==============================================
+Phase: Deterministic drift test (noise_scale=0.0, T=20000)
+==============================================
+Command: python3 scripts/run_deterministic_drift.py --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --T 20000 --B 0 --S 1 --log-every 100 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt 2>&1
+Hint: Check experiments/runs/w1_n512_h5e-08_a0.3_det_chain0/iter_metrics.jsonl for drift-only diagnostics (U_train, ce_mean_train, dist_to_ref, theta_norm, etc.).
+chain 0 step 10000/20000 (50.0%) U=174.4 ||∇U||=26.5 ||θ||=30 f_nll=35.944
+chain 0 step 20000/20000 (100.0%) U=174.1 ||∇U||=26.3 ||θ||=30 f_nll=35.625
+Result: PASS
+
+==============================================
+Phase: ULA one-step moment test (theta0 fixed at pretrained m=64)
+==============================================
+Command: python3 scripts/test_one_step_moments.py --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --reps 512 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt 2>&1
+Hint: See experiments/runs/one_step_moment_w1_n512_h5e-08_a0.3.json for projection/coordinate mean-variance diagnostics.
+One-step ULA moment test
+  width=1.0, n_train=512, alpha=0.3, h=5e-08
+  reps=512, num_proj=10, coord_subsample=512
+  U(theta0) = 174.723785
+  ||grad_U(theta0)|| = 27.491734
+  mean projections within 3*SE: 100.0% (pass=True)
+  var projections within 20% of 2h: 100.0% (pass=True)
+  coord-wise var within 20% of 2h: 100.0% (pass=True)
+  overall pass = True
+Wrote JSON summary to experiments/runs/one_step_moment_w1_n512_h5e-08_a0.3.json
+Result: PASS
+
+==============================================
+Phase: No-drift noise-only test (drift_scale=0, noise on, T=20000)
+==============================================
+Command: python3 scripts/run_no_drift_noise_test.py --width 1 --n_train 512 --alpha 0.3 --h 5e-8 --T 20000 --B 0 --S 1 --log-every 100 --chains 1 --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt 2>&1
+Hint: Check experiments/runs/drift0_noise1_w1_n512_h5e-08_a0.3_chain0/iter_metrics.jsonl for pure-diffusion diagnostics (theta_norm, dist_to_ref, etc.).
+chain 0 step 10000/20000 (50.0%) U=1081.8 ||∇U||=13179.5 ||θ||=33 f_nll=914.002
+chain 0 step 20000/20000 (100.0%) U=1776.5 ||∇U||=18628.8 ||θ||=35 f_nll=1586.809
+Done: experiments/runs/drift0_noise1_w1_n512_h5e-08_a0.3_chain0
+Result: PASS
+
+Phase: Extra diagnostics (skipped, use --extra to run)
+
+==============================================
+Phase: Smoke run (short ULA chain T=500)
+==============================================
+Command: python3 scripts/smoke_run.py 2>&1
+Hint: Smoke writes to experiments/runs/smoke_w0.5_n128_h1e-5_chain0/. Check run_config.yaml and iter_metrics.jsonl for errors.
+Approx SNR at init (h=0.0001, noise_scale=1.0): 2.385e-05 (signal=5.642e-04, noise=2.365e+01, d=2797610)
+Smoke run done: experiments/runs/smoke_w0.5_n128_h1e-5_chain0
+Check run_config.yaml, iter_metrics.jsonl, samples_metrics.npz
+Smoke run PASS: outputs present and metrics finite.
+Result: PASS
+
+==============================================
+Summary
+==============================================
+Unit tests:       PASS
+Regression:       PASS
+Drift test:       PASS
+One-step test:    PASS
+No-drift noise:   PASS
+Extra diag:       PASS / skipped
+Smoke run:        PASS
+==============================================
+Full log: logs/run_tests/run_tests_20260313_212921.log
+=== Test run finished at Fri Mar 13 23:33:39 CDT 2026 ===
+Overall: PASS
