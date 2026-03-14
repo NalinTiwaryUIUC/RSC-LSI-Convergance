@@ -1,0 +1,38 @@
+Log file: logs/chain/chain_20260313_121540.log
+Using .venv
+=== Chain run started at Fri Mar 13 12:15:40 CDT 2026 ===
+=== Working directory: /scratch/nalint2/RSC-LSI-Convergance ===
+=== Python ===
+Python 3.9.21
+=== PyTorch / GPU ===
+PyTorch: 2.8.0+cu128
+CUDA available: True
+Device: NVIDIA A10
+
+==============================================
+Command: python3 scripts/run_single_chain.py   --arch small_resnet_ln   --num-blocks 2   --width 1   --n_train 512   --alpha 300   --h 5e-8   --T 20000   --B 2000   --S 500   --log-every 100   --chain 0   --pretrain-path experiments/checkpoints/pretrain_small_resnet_ln_w1_n512.pt
+==============================================
+usage: run_single_chain.py [-h] [--width WIDTH] [--h H] [--chain CHAIN]
+                           [--n_train N_TRAIN] [--probe_size PROBE_SIZE]
+                           [--T T] [--B B] [--S S] [--log-every LOG_EVERY]
+                           [--pretrain-steps PRETRAIN_STEPS]
+                           [--pretrain-lr PRETRAIN_LR]
+                           [--pretrain-weight-decay PRETRAIN_WEIGHT_DECAY]
+                           [--pretrain-path PRETRAIN_PATH]
+                           [--bn-mode {eval,batchstat_frozen}]
+                           [--bn-calibration-steps BN_CALIBRATION_STEPS]
+                           [--data_dir DATA_DIR] [--runs_dir RUNS_DIR]
+                           [--root ROOT] [--dataset-seed DATASET_SEED]
+                           [--chain-seed CHAIN_SEED]
+                           [--probe-projection-seed PROBE_PROJECTION_SEED]
+                           [--device DEVICE] [--noise-scale NOISE_SCALE]
+                           [--alpha ALPHA] [--ce-reduction {mean,sum}]
+                           [--clip-grad-norm CLIP_GRAD_NORM]
+                           [--microbatch-size MICROBATCH_SIZE]
+                           [--arch {resnet18,small_resnet_ln}]
+                           [--num-blocks NUM_BLOCKS]
+run_single_chain.py: error: unrecognized arguments:                        
+
+=== Chain run finished at Fri Mar 13 12:15:57 CDT 2026 ===
+Exit code: 2
+FAIL: run_single_chain.py exited with 2. Check logs/chain/chain_20260313_121540.log for errors.
