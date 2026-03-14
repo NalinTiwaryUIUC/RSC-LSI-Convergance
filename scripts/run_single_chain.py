@@ -52,6 +52,7 @@ def main() -> None:
     p.add_argument("--probe-projection-seed", type=int, default=_DEFAULTS.probe_projection_seed, help="Probe projection vectors")
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
+    p.add_argument("--drift-scale", type=float, default=_DEFAULTS.drift_scale, help="Multiply drift term (default 1.0; 0 = noise-only, pure diffusion)")
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     p.add_argument("--ce-reduction", type=str, default=_DEFAULTS.ce_reduction, choices=["mean", "sum"],
                    help="CE reduction in U: mean (stable at larger h) or sum")
@@ -87,6 +88,7 @@ def main() -> None:
         log_every=args.log_every,
         K=_DEFAULTS.K,
         noise_scale=args.noise_scale,
+        drift_scale=args.drift_scale,
         pretrain_steps=args.pretrain_steps,
         pretrain_lr=args.pretrain_lr,
         pretrain_weight_decay=args.pretrain_weight_decay,
@@ -107,6 +109,8 @@ def main() -> None:
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
     run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_chain{args.chain}"
+    if getattr(args, "drift_scale", 1.0) != 1.0:
+        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_drift{args.drift_scale}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     train_loader = get_train_loader(

@@ -57,6 +57,7 @@ def ula_step(
     h: float,
     device: torch.device,
     noise_scale: float = 1.0,
+    drift_scale: float = 1.0,
     return_U: bool = False,
     generator: torch.Generator | None = None,
     ce_reduction: str = "mean",
@@ -97,7 +98,7 @@ def ula_step(
     grad_norm_post_clip: float | None = grads.norm().item() if clip_grad_norm is not None else None
 
     noise_std = (2.0 * h) ** 0.5 * noise_scale
-    drift = -h * grads
+    drift = drift_scale * (-h * grads)
     noise = noise_std * torch.randn(
         theta_prev.shape, device=device, dtype=theta_prev.dtype, generator=generator
     )

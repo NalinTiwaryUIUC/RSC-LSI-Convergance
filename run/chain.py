@@ -207,6 +207,7 @@ def run_chain(
                 config.h,
                 device,
                 noise_scale=config.noise_scale,
+                drift_scale=getattr(config, "drift_scale", 1.0),
                 return_U=(step % log_U_every == 0 or step == 1),
                 generator=gen,
                 ce_reduction=config.ce_reduction,

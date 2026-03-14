@@ -48,6 +48,7 @@ class RunConfig:
     ce_reduction: str = "sum"  # "mean" or "sum"; mean = stable at larger h, sum = matches log-posterior scale
     temperature: float = 1.0
     noise_scale: float = 1.0  # standard ULA uses 1; <1 = less noise, >1 = more diffusion
+    drift_scale: float = 1.0  # multiply drift term (-h*grad); 0 = noise-only (pure diffusion from init)
     clip_grad_norm: float | None = None  # S3: if set, clip grad and log grad_norm_pre_clip, grad_norm_post_clip
 
     # Chain
