@@ -21,7 +21,7 @@ pretrain_lr: 0.02
 pretrain_weight_decay: 0.0
 T: 384000
 B: 38400
-S: 32000
+S: 6400
 K: 4
 sigma_init_scale: 0.0001
 grad_norm_stride: 5
