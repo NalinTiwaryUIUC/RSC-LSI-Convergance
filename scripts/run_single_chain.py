@@ -108,9 +108,10 @@ def main() -> None:
         config.effective_batch_size = args.n_train
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
-    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_chain{args.chain}"
+    # Include total steps T in the run directory to distinguish horizons
+    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_chain{args.chain}"
     if getattr(args, "drift_scale", 1.0) != 1.0:
-        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_drift{args.drift_scale}_chain{args.chain}"
+        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_drift{args.drift_scale}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     train_loader = get_train_loader(

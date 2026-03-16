@@ -131,7 +131,7 @@ def main() -> None:
 
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")
-    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}_det_chain{args.chain}"
+    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_det_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     run_chain(

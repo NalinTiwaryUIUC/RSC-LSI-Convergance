@@ -109,7 +109,7 @@ def main() -> None:
 
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")
-    base_name = f"drift0_noise1_w{w_str}_n{args.n_train}_h{args.h}_a{alpha_str}"
+    base_name = f"drift0_noise1_w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}"
 
     for chain_id in range(args.chains):
         config = RunConfig(
