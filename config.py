@@ -46,7 +46,7 @@ class RunConfig:
     h: float = 1e-4  # larger steps for more movement
     alpha: float = 0.01  # reduced from 0.05 to lessen ∇NLL/αθ cancellation; improves SNR
     ce_reduction: str = "sum"  # "mean" or "sum"; mean = stable at larger h, sum = matches log-posterior scale
-    temperature: float = 1.0
+    beta: float = 1.0  # temperature scaling: effective U = beta*U (likelihood scaled by beta)
     noise_scale: float = 1.0  # standard ULA uses 1; <1 = less noise, >1 = more diffusion
     drift_scale: float = 1.0  # multiply drift term (-h*grad); 0 = noise-only (pure diffusion from init)
     clip_grad_norm: float | None = None  # S3: if set, clip grad and log grad_norm_pre_clip, grad_norm_post_clip
@@ -104,6 +104,9 @@ class RunConfig:
         # Ignore unknown keys so we can load configs with extra fields
         valid = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in d.items() if k in valid}
+        # Backward compat: old configs may have "temperature" instead of "beta"
+        if "beta" not in filtered and "temperature" in d:
+            filtered["beta"] = d["temperature"]
         return cls(**filtered)
 
     @classmethod

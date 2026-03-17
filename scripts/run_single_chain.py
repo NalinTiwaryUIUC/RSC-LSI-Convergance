@@ -54,6 +54,7 @@ def main() -> None:
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
     p.add_argument("--drift-scale", type=float, default=_DEFAULTS.drift_scale, help="Multiply drift term (default 1.0; 0 = noise-only, pure diffusion)")
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
+    p.add_argument("--beta", type=float, default=getattr(_DEFAULTS, "beta", 1.0), help="Temperature scaling: effective U = beta*U (default 1.0)")
     p.add_argument("--ce-reduction", type=str, default=_DEFAULTS.ce_reduction, choices=["mean", "sum"],
                    help="CE reduction in U: mean (stable at larger h) or sum")
     p.add_argument("--clip-grad-norm", type=float, default=None,
@@ -81,6 +82,7 @@ def main() -> None:
         num_blocks=args.num_blocks,
         h=args.h,
         alpha=args.alpha,
+        beta=args.beta,
         ce_reduction=args.ce_reduction,
         T=args.T,
         B=args.B,
@@ -108,10 +110,11 @@ def main() -> None:
         config.effective_batch_size = args.n_train
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
-    # Include total steps T in the run directory to distinguish horizons
-    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_chain{args.chain}"
+    beta_str = str(args.beta).replace(".", "p")  # 1.0 -> 1p0, 0.5 -> 0p5 for filenames
+    # Include T and beta in run directory name
+    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}_chain{args.chain}"
     if getattr(args, "drift_scale", 1.0) != 1.0:
-        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_drift{args.drift_scale}_chain{args.chain}"
+        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}_drift{args.drift_scale}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     train_loader = get_train_loader(

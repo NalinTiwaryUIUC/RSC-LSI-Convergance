@@ -208,6 +208,7 @@ def run_chain(
                 device,
                 noise_scale=config.noise_scale,
                 drift_scale=getattr(config, "drift_scale", 1.0),
+                beta=getattr(config, "beta", 1.0),
                 return_U=(step % log_U_every == 0 or step == 1),
                 generator=gen,
                 ce_reduction=config.ce_reduction,
@@ -274,9 +275,10 @@ def run_chain(
                         dist_to_ref_at_step1 = math.sqrt(f_dist_val)
                     nll_probe_mean_at_step1 = nll_probe_mean
 
-                # A. U decomposition + scale sanity
+                # A. U decomposition + scale sanity (U_now = beta*U; U_prior = beta*(alpha/2)*||θ||² so U_data = beta*CE)
                 theta_norm_val = out.get("theta_norm")
-                U_prior = (0.5 * config.alpha * (theta_norm_val**2)) if theta_norm_val is not None else None
+                beta_val = getattr(config, "beta", 1.0)
+                U_prior = (beta_val * 0.5 * config.alpha * (theta_norm_val**2)) if theta_norm_val is not None else None
                 U_data = (U_now - U_prior) if (U_now is not None and U_prior is not None) else None
                 if config.ce_reduction == "sum":
                     ce_sum_train = U_data

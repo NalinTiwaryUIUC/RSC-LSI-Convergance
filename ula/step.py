@@ -24,8 +24,9 @@ def _compute_U_and_grad_microbatch(
     ce_reduction: str,
     microbatch_size: int,
     num_microbatches: int,
+    beta: float = 1.0,
 ) -> float:
-    """Accumulate grad over microbatches; return full-batch U (scalar)."""
+    """Accumulate grad over microbatches; return full-batch effective U = beta*U (scalar)."""
     n = x.shape[0]
     model.zero_grad(set_to_none=True)
     U_data_sum = 0.0
@@ -37,16 +38,14 @@ def _compute_U_and_grad_microbatch(
         logits = model(x_mb)
         ce = F.cross_entropy(logits, y_mb, reduction=ce_reduction)
         if ce_reduction == "mean":
-            # Full-batch mean = (1/n)*sum CE_i; grad(mean) = (1/n)*sum grad(CE_i). Backward (ce/n) so we add (1/n)*grad(ce_chunk).
-            (ce / n).backward()
+            (beta * ce / n).backward()
             U_data_sum += ce.item() * (y_mb.shape[0] / n)
         else:
-            ce.backward()
+            (beta * ce).backward()
             U_data_sum += ce.item()
-    # Add prior gradient: d/dθ (alpha/2 ||θ||^2) = alpha*θ (use model.parameters() so backward accumulates)
     reg = (alpha / 2.0) * sum((p * p).sum() for p in model.parameters())
-    reg.backward()
-    U = U_data_sum + reg.item()
+    (beta * reg).backward()
+    U = beta * (U_data_sum + reg.item())
     return U
 
 
@@ -58,6 +57,7 @@ def ula_step(
     device: torch.device,
     noise_scale: float = 1.0,
     drift_scale: float = 1.0,
+    beta: float = 1.0,
     return_U: bool = False,
     generator: torch.Generator | None = None,
     ce_reduction: str = "mean",
@@ -82,13 +82,13 @@ def ula_step(
     if num_microbatches > 1:
         U = _compute_U_and_grad_microbatch(
             model, x, y, alpha, device, ce_reduction,
-            microbatch_size, num_microbatches,
+            microbatch_size, num_microbatches, beta=beta,
         )
     else:
         model.zero_grad(set_to_none=True)
         U_tensor = compute_U(model, train_data, alpha, device, ce_reduction=ce_reduction)
-        U_tensor.backward()
-        U = U_tensor.item()
+        (beta * U_tensor).backward()
+        U = (beta * U_tensor).item()
 
     grads = torch.cat([p.grad.view(-1) for p in model.parameters()])
     grad_norm_pre_clip: float | None = grads.norm().item() if clip_grad_norm is not None else None
