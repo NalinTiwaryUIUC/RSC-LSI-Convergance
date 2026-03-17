@@ -65,6 +65,8 @@ def main() -> None:
                    help="Model architecture: resnet18 (default) or small_resnet_ln (LayerNorm small ResNet).")
     p.add_argument("--num-blocks", type=int, default=_DEFAULTS.num_blocks,
                    help="Number of residual blocks for small_resnet_ln (ignored for resnet18).")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Parse args, build config and run_dir, print summary and exit 0 without running the chain.")
     args = p.parse_args()
 
     ensure_directories()
@@ -116,6 +118,15 @@ def main() -> None:
     if getattr(args, "drift_scale", 1.0) != 1.0:
         run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}_drift{args.drift_scale}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
+
+    if args.dry_run:
+        print("DRY-RUN: config and run_dir built successfully. No chain will be run.")
+        print("  run_dir:", run_dir)
+        print("  arch:", config.arch, "width:", config.width_multiplier, "n_train:", config.n_train)
+        print("  alpha:", config.alpha, "beta:", config.beta, "h:", config.h)
+        print("  T:", config.T, "B:", config.B, "S:", config.S, "log_every:", config.log_every)
+        print("  chain:", args.chain)
+        return
 
     train_loader = get_train_loader(
         config.n_train,

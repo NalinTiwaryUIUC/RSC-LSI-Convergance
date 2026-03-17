@@ -42,6 +42,7 @@
 #   DEVICE             --device (cuda, cuda:0, cpu, or empty for auto)
 #   NOISE_SCALE        --noise-scale
 #   ALPHA              --alpha
+#   BETA               --beta (temperature scaling: effective U = beta*U, default 1.0)
 #   CE_REDUCTION       --ce-reduction (mean | sum)
 #   CLIP_GRAD_NORM     --clip-grad-norm
 #   MICROBATCH_SIZE    --microbatch-size
@@ -113,6 +114,7 @@ ARGS=()
 [ -n "$DEVICE" ]                 && ARGS+=(--device "$DEVICE")
 [ -n "$NOISE_SCALE" ]            && ARGS+=(--noise-scale "$NOISE_SCALE")
 [ -n "$ALPHA" ]                  && ARGS+=(--alpha "$ALPHA")
+[ -n "$BETA" ]                   && ARGS+=(--beta "$BETA")
 [ -n "$CE_REDUCTION" ]           && ARGS+=(--ce-reduction "$CE_REDUCTION")
 [ -n "$CLIP_GRAD_NORM" ]         && ARGS+=(--clip-grad-norm "$CLIP_GRAD_NORM")
 [ -n "$MICROBATCH_SIZE" ]        && ARGS+=(--microbatch-size "$MICROBATCH_SIZE")

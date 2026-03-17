@@ -14,13 +14,15 @@
 #SBATCH --error=logs/lsi_ula/lsi_ula_%j.err
 
 # Run one ULA chain. IMPORTANT: Submit from the project directory (cd /path/to/RSC_Conv first).
-# Arguments: WIDTH  H  CHAIN  N_TRAIN  [ALPHA]
+# Arguments: WIDTH  H  CHAIN  N_TRAIN  [ALPHA]  [BETA]
 #   CHAIN = 0, 1, 2, or 3 (four chains per width/h/alpha)
 #   ALPHA = optional, default 0.01
+#   BETA  = optional, default 1.0 (temperature scaling: effective U = beta*U)
 # Examples:
 #   sbatch scripts/submit_chain.sh              # defaults: width=1, h=1e-5, chain=0, n_train=1024
 #   sbatch scripts/submit_chain.sh 1 1e-5 0 1024   # chain 0
 #   sbatch scripts/submit_chain.sh 0.1 5e-5 0 1024 0.1   # alpha sweep
+#   sbatch scripts/submit_chain.sh 1 5e-8 0 512 0.3 10   # beta=10
 #   for w in 0.5 1 2 4; do for c in 0 1 2 3; do sbatch scripts/submit_chain.sh $w 1e-5 $c 1024; done; done
 
 WIDTH=${1:-1}
@@ -28,6 +30,7 @@ H=${2:-1e-5}
 CHAIN=${3:-0}      # 0, 1, 2, or 3
 N_TRAIN=${4:-1024}
 ALPHA=${5:-0.01}   # optional, for alpha sweep
+BETA=${6:-${BETA:-}}   # optional 6th arg or env BETA; default 1.0 in Python if unset
 BN_MODE=${BN_MODE:-}   # Optional: eval | batchstat_frozen (default from RunConfig if unset)
 
 # Project root: use SLURM submission dir (you must run sbatch from the project directory)
@@ -46,7 +49,7 @@ mkdir -p logs/lsi_ula
 
 echo "=== Job started at $(date) ==="
 echo "=== Job ID: $SLURM_JOB_ID ==="
-echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA ==="
+echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA beta=${BETA:-1} ==="
 echo "=== Working directory: $PROJ_DIR ==="
 
 # Activate venv first so all python3/pip commands use it (avoids ModuleNotFoundError for torch)
@@ -93,6 +96,10 @@ BN_ARGS=""
 if [ -n "$BN_MODE" ]; then
     BN_ARGS="--bn-mode $BN_MODE"
 fi
+BETA_ARGS=""
+if [ -n "$BETA" ]; then
+    BETA_ARGS="--beta $BETA"
+fi
 python3 scripts/run_single_chain.py \
     --width "$WIDTH" \
     --h "$H" \
@@ -104,6 +111,7 @@ python3 scripts/run_single_chain.py \
     --data_dir experiments/data \
     --runs_dir experiments/runs \
     --root ./data \
+    $BETA_ARGS \
     $BN_ARGS
 
 EXIT_CODE=$?
