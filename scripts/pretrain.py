@@ -8,7 +8,7 @@ BN: pretrain in train(); after pretrain, BN calibration pass (forward in train m
 
 Usage:
   python scripts/pretrain.py --width 0.1 --n_train 1024 --alpha 0.1 --pretrain-steps 2000
-  python scripts/pretrain.py --width 0.1 --n_train 1024 -o experiments/checkpoints/pretrain_w0.1_n1024.pt
+  python scripts/pretrain.py --width 0.1 --n_train 1024 -o experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
 """
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def main() -> None:
         help="Weight decay for SGD during pretraining (default 0.0; nonzero adds optimizer L2 term in addition to explicit loss penalty).",
     )
     p.add_argument("-o", "--output", type=str, default=None,
-                   help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}.pt")
+                   help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}_nb{num_blocks}.pt")
     p.add_argument("--bn-calibration-microbatch", type=int, default=BN_CALIBRATION_MICROBATCH,
                    help="Microbatch size for BN calibration forward pass (fixed across widths)")
     p.add_argument("--data_dir", type=str, default="experiments/data")
@@ -138,7 +138,7 @@ def main() -> None:
         w_str = int(args.width) if args.width == int(args.width) else args.width
         out_dir = Path("experiments/checkpoints")
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"pretrain_w{w_str}_n{args.n_train}.pt"
+        out_path = out_dir / f"pretrain_w{w_str}_n{args.n_train}_nb{args.num_blocks}.pt"
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,7 @@ Usage:
   python scripts/diagnose_ula.py --n_train 128 --width 0.5 --h 0.0001 --alpha 0.01 --noise-scale 1.0 --pretrain-steps 100 --data_dir experiments/data --root ./data
 
   # With pretrain checkpoint:
-  python scripts/diagnose_ula.py --pretrain-path experiments/checkpoints/pretrain_w1_n1024.pt --n_train 1024 --width 1 --h 0.0001 --alpha 0.01 --noise-scale 1.0 --pretrain-steps 0 --data_dir experiments/data --root ./data
+  python scripts/diagnose_ula.py --pretrain-path experiments/checkpoints/pretrain_w1_n1024_nb2.pt --n_train 1024 --width 1 --h 0.0001 --alpha 0.01 --noise-scale 1.0 --pretrain-steps 0 --data_dir experiments/data --root ./data
 
 Outputs:
   - Gradient decomposition (NLL vs prior)

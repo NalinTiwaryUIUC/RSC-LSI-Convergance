@@ -52,7 +52,7 @@
 #
 # Examples:
 #   ./scripts/run_single_chain.sh --width 1 --h 1e-5 --chain 0 --n_train 1024
-#   ./scripts/run_single_chain.sh --width 0.5 --chain 0 --pretrain-path experiments/checkpoints/pretrain_w0.5_n1024.pt
+#   ./scripts/run_single_chain.sh --width 0.5 --chain 0 --pretrain-path experiments/checkpoints/pretrain_w0.5_n1024_nb2.pt
 #   WIDTH=1 H=1e-5 CHAIN=0 ./scripts/run_single_chain.sh
 #
 set -e

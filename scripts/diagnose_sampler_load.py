@@ -8,9 +8,9 @@ Run 3: model.train(), same batch as Run 1 (mode sensitivity)
 Run 4: model.eval(), new batch with TRAIN_TRANSFORM (transform sensitivity)
 
 Usage:
-  python scripts/diagnose_sampler_load.py --run 2 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024.pt
-  python scripts/diagnose_sampler_load.py --run 3 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024.pt
-  python scripts/diagnose_sampler_load.py --run 4 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024.pt
+  python scripts/diagnose_sampler_load.py --run 2 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
+  python scripts/diagnose_sampler_load.py --run 3 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
+  python scripts/diagnose_sampler_load.py --run 4 --checkpoint experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
 
 Requires: Run pretrain with --verify first to create the .batch.pt file (for runs 2 and 3).
 """

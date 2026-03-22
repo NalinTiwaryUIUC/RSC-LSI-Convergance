@@ -6,7 +6,7 @@ CE sum vs mean, prior correctness, BN buffer frozen.
 
 Usage:
   python scripts/diagnose_sanity_checks.py
-  python scripts/diagnose_sanity_checks.py --n_train 512 --width 0.1 --pretrain-path experiments/checkpoints/pretrain_w0.1_n1024.pt
+  python scripts/diagnose_sanity_checks.py --n_train 512 --width 0.1 --pretrain-path experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
 """
 from __future__ import annotations
 

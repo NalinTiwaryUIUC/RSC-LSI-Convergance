@@ -24,7 +24,7 @@
 #   ALPHA              --alpha (default: 0.1)
 #   PRETRAIN_STEPS     --pretrain-steps (default: 2000)
 #   PRETRAIN_LR        --pretrain-lr (default: 0.02)
-#   OUTPUT             -o/--output (default: experiments/checkpoints/pretrain_w{W}_n{N}.pt)
+#   OUTPUT             -o/--output (default: experiments/checkpoints/pretrain_w{W}_n{N}_nb{NUM_BLOCKS}.pt)
 #   ARCH               --arch (default: resnet18)
 #   NUM_BLOCKS         --num-blocks (default: 2)
 #   DATA_DIR           --data_dir
@@ -37,7 +37,7 @@
 #
 # Examples:
 #   ./scripts/run_pretrain.sh --width 0.1 --n_train 1024
-#   ./scripts/run_pretrain.sh --width 0.1 --n_train 1024 --alpha 0.1 -o experiments/checkpoints/pretrain_w0.1_n1024.pt
+#   ./scripts/run_pretrain.sh --width 0.1 --n_train 1024 --alpha 0.1 -o experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
 #   WIDTH=0.1 N_TRAIN=1024 ./scripts/run_pretrain.sh
 #   PRETRAIN_STEPS=500 ./scripts/run_pretrain.sh --width 0.5 --n_train 2048
 #

@@ -7,7 +7,7 @@ Use this to sanity-check: if pretrain reported CE ~1.x but Run 1 shows CE ~4,
 there may be a pipeline mismatch (BN mode, augmentations, data split, etc.).
 
 Usage:
-  python scripts/eval_checkpoint.py experiments/checkpoints/pretrain_w0.1_n1024.pt
+  python scripts/eval_checkpoint.py experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
   python scripts/eval_checkpoint.py path/to/ckpt.pt --n_train 1024 --dataset_seed 42
 """
 from __future__ import annotations

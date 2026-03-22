@@ -26,7 +26,7 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 - **Alternative (legacy)**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
 - **Noise scale**: Default 1.0 (standard ULA). Use `--noise-scale` to override; run `scripts/diagnose_ula.py` to tune for balance.
-- **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train) and pass `--pretrain-path` to run and diagnose.
+- **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train, num_blocks) and pass `--pretrain-path` to run and diagnose (default checkpoint name includes `_nb{num_blocks}`).
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
 - **Data**: Subsampled CIFAR-10 with `n_train ∈ {512, 1024, 2048}` (e.g. 1024); probe_size = 512.
@@ -36,14 +36,14 @@ You can optionally use a **small 2–3 block ResNet with LayerNorm** instead of 
 an `--arch` flag (e.g. `scripts/run_single_chain.py`, `scripts/diagnose_ula.py`, `scripts/diagnose_sanity_checks.py`).
 Width is still controlled by `--width` as above.
 
-### Optional: Pretrain once per (width, n_train) for standardized init
+### Optional: Pretrain once per (width, n_train, num_blocks) for standardized init
 
 Use a fixed random seed so all chains start from the same pretrained checkpoint:
 
 ```bash
 # Pretrain for width 1, n_train 1024 (fixed seed 42)
 python3 scripts/pretrain.py --width 1 --n_train 1024 --pretrain-steps 2000
-# Writes experiments/checkpoints/pretrain_w1_n1024.pt
+# Writes experiments/checkpoints/pretrain_w1_n1024_nb2.pt (default num-blocks=2)
 
 # For other widths:
 python3 scripts/pretrain.py --width 0.1 --n_train 1024
@@ -57,7 +57,7 @@ Then pass `--pretrain-path` to run and diagnose (see Option A/B below).
 ```bash
 # Example: width 1, h=1e-5, 4 chains, n_train=1024 (plan defaults)
 # With shared pretrain (run pretrain.py first):
-PRETRAIN=experiments/checkpoints/pretrain_w1_n1024.pt
+PRETRAIN=experiments/checkpoints/pretrain_w1_n1024_nb2.pt
 for chain in 0 1 2 3; do
   python3 scripts/run_single_chain.py \
     --width 1 --h 1e-5 --chain $chain --n_train 1024 \
