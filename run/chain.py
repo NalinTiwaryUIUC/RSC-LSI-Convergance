@@ -29,6 +29,7 @@ from run.diagnostics import (
     basic_block_predicate,
 )
 from run.persistence import dump_failure, write_iter_metrics, write_run_config, write_samples_metrics
+from ula.baoab import underdamped_baoab_step
 from ula.step import ula_step
 
 
@@ -197,25 +198,59 @@ def run_chain(
     bad_locality_consecutive: int = 0
     bad_prediction_consecutive: int = 0
     act_logger, act_hooks = register_activation_hooks(model, basic_block_predicate)
+
+    sampler = getattr(config, "sampler", "overdamped")
+    param_dtype = next(model.parameters()).dtype
+    vel: torch.Tensor | None = None
+    if sampler == "underdamped":
+        vel = torch.zeros(d, device=device, dtype=param_dtype)
+        v_init = getattr(config, "v_init", "zero")
+        if v_init == "gaussian":
+            g_v = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + 999_999)
+            vel.normal_(mean=0.0, std=1.0, generator=g_v)
+
     try:
         for step in range(1, T + 1):
             gen = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + step)
-            out = ula_step(
-                model,
-                train_data,
-                config.alpha,
-                config.h,
-                device,
-                noise_scale=config.noise_scale,
-                drift_scale=getattr(config, "drift_scale", 1.0),
-                beta=getattr(config, "beta", 1.0),
-                return_U=(step % log_U_every == 0 or step == 1),
-                generator=gen,
-                ce_reduction=config.ce_reduction,
-                clip_grad_norm=getattr(config, "clip_grad_norm", None),
-                num_microbatches=config.num_microbatches,
-                microbatch_size=config.microbatch_size,
-            )
+            need_u = step % log_U_every == 0 or step == 1
+            if sampler == "overdamped":
+                out = ula_step(
+                    model,
+                    train_data,
+                    config.alpha,
+                    config.h,
+                    device,
+                    noise_scale=config.noise_scale,
+                    drift_scale=getattr(config, "drift_scale", 1.0),
+                    beta=getattr(config, "beta", 1.0),
+                    return_U=need_u,
+                    generator=gen,
+                    ce_reduction=config.ce_reduction,
+                    clip_grad_norm=getattr(config, "clip_grad_norm", None),
+                    num_microbatches=config.num_microbatches,
+                    microbatch_size=config.microbatch_size,
+                )
+            else:
+                assert vel is not None
+                gamma = float(getattr(config, "gamma", 1.0))
+                out = underdamped_baoab_step(
+                    model,
+                    vel,
+                    train_data,
+                    config.alpha,
+                    config.h,
+                    gamma,
+                    device,
+                    noise_scale=config.noise_scale,
+                    drift_scale=getattr(config, "drift_scale", 1.0),
+                    beta=getattr(config, "beta", 1.0),
+                    return_U=need_u,
+                    generator=gen,
+                    ce_reduction=config.ce_reduction,
+                    clip_grad_norm=getattr(config, "clip_grad_norm", None),
+                    num_microbatches=config.num_microbatches,
+                    microbatch_size=config.microbatch_size,
+                )
             if step % config.log_every == 0 or step == 1:
                 vals = evaluate_probes(
                     model, probe_data, theta0_flat, v1, v2, logit_proj, device,
@@ -223,9 +258,9 @@ def run_chain(
                 )
                 U_now = out.get("U")
                 grad_n = out.get("grad_norm")
-                # SNR = (h * ||grad||) / (sqrt(2*h*d) * noise_scale); diagnose drift vs noise
+                # SNR = (h * ||grad||) / (sqrt(2*h*d) * noise_scale); overdamped ULA only
                 snr_val = None
-                if grad_n is not None and d > 0 and config.noise_scale > 0:
+                if sampler == "overdamped" and grad_n is not None and d > 0 and config.noise_scale > 0:
                     noise_std = math.sqrt(2.0 * config.h * d) * config.noise_scale
                     if noise_std > 0:
                         snr_val = (config.h * grad_n) / noise_std
@@ -243,11 +278,15 @@ def run_chain(
 
                 # Failure guard: dump and return on first non-finite
                 if not (finite_loss and finite_params and finite_grad):
-                    dump_failure(run_dir, step, model, {
+                    fail_pl: Dict[str, Any] = {
                         "h": config.h, "alpha": config.alpha, "noise_scale": config.noise_scale,
+                        "sampler": sampler,
                         "U_train": U_now, "finite_loss": finite_loss, "finite_params": finite_params,
                         "finite_grad": finite_grad, "nan_count_params": nan_params, "nan_count_grads": nan_grads,
-                    })
+                    }
+                    if vel is not None:
+                        fail_pl["v"] = vel.detach().cpu().clone()
+                    dump_failure(run_dir, step, model, fail_pl)
                     write_iter_metrics(
                         step=step, grad_evals=step, run_dir=run_dir,
                         U_train=U_now, grad_norm=grad_n, theta_norm=out.get("theta_norm"),
@@ -379,6 +418,11 @@ def run_chain(
                     "bad_prediction": bad_prediction,
                     "abort_suggested": abort_suggested,
                 }
+                if sampler == "underdamped":
+                    extra["v_norm"] = out.get("v_norm")
+                    extra["kinetic_energy"] = out.get("kinetic_energy")
+                    extra["theta_v_cosine"] = out.get("theta_v_cosine")
+                    extra["gamma"] = float(getattr(config, "gamma", 1.0))
                 # S3: grad norms pre/post clipping (when clip_grad_norm is set)
                 if out.get("grad_norm_pre_clip") is not None and out.get("grad_norm_post_clip") is not None:
                     extra["grad_norm_pre_clip"] = out["grad_norm_pre_clip"]
@@ -419,6 +463,8 @@ def run_chain(
                     parts.append(f"||∇U||={out['grad_norm']:.1f}")
                 if "theta_norm" in out:
                     parts.append(f"||θ||={out['theta_norm']:.0f}")
+                if sampler == "underdamped" and out.get("v_norm") is not None:
+                    parts.append(f"||v||={out['v_norm']:.1f}")
                 if step % config.log_every == 0 or step == 1:
                     parts.append(f"f_nll={vals.get('f_nll', float('nan')):.3f}")
                 print(" ".join(parts))
@@ -430,8 +476,8 @@ def run_chain(
                     model, probe_data, theta0_flat, v1, v2, logit_proj, device,
                     nll_data=train_data, ce_reduction=config.ce_reduction,
                 )
-                for k, v in vals.items():
-                    f_values[k].append(v)
+                for k, fv in vals.items():
+                    f_values[k].append(fv)
                 saved_count += 1
                 # Every G-th saved sample: compute grad norms for selected probes
                 if saved_count % G == 0:

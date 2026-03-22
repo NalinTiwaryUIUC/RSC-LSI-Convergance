@@ -48,6 +48,9 @@
 #   MICROBATCH_SIZE    --microbatch-size
 #   ARCH               --arch (resnet18 | small_resnet_ln)
 #   NUM_BLOCKS         --num-blocks
+#   SAMPLER            --sampler (overdamped | underdamped)
+#   GAMMA              --gamma (underdamped / BAOAB friction)
+#   V_INIT             --v-init (zero | gaussian)
 #   LOG_DIR            directory for log file (default: logs/chain)
 #
 # Examples:
@@ -120,6 +123,9 @@ ARGS=()
 [ -n "$MICROBATCH_SIZE" ]        && ARGS+=(--microbatch-size "$MICROBATCH_SIZE")
 [ -n "$ARCH" ]                   && ARGS+=(--arch "$ARCH")
 [ -n "$NUM_BLOCKS" ]             && ARGS+=(--num-blocks "$NUM_BLOCKS")
+[ -n "$SAMPLER" ]                && ARGS+=(--sampler "$SAMPLER")
+[ -n "$GAMMA" ]                  && ARGS+=(--gamma "$GAMMA")
+[ -n "$V_INIT" ]                && ARGS+=(--v-init "$V_INIT")
 
 log "=== Chain run started at $(date) ==="
 log "=== Working directory: $PROJ_DIR ==="

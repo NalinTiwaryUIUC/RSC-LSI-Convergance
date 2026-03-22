@@ -53,6 +53,21 @@ def main() -> None:
     p.add_argument("--device", type=str, default=None, help="Device: cuda, cuda:0, cpu, or empty for auto")
     p.add_argument("--noise-scale", type=float, default=_DEFAULTS.noise_scale, help="Langevin noise scale (default 1.0; <1 = less diffusion, >1 = more)")
     p.add_argument("--drift-scale", type=float, default=_DEFAULTS.drift_scale, help="Multiply drift term (default 1.0; 0 = noise-only, pure diffusion)")
+    p.add_argument(
+        "--sampler",
+        type=str,
+        default=_DEFAULTS.sampler,
+        choices=["overdamped", "underdamped"],
+        help="overdamped=ULA (default); underdamped=BAOAB (2 grad evals per step)",
+    )
+    p.add_argument("--gamma", type=float, default=_DEFAULTS.gamma, help="Friction gamma for underdamped/BAOAB (ignored for overdamped)")
+    p.add_argument(
+        "--v-init",
+        type=str,
+        default=_DEFAULTS.v_init,
+        choices=["zero", "gaussian"],
+        help="Initial momentum for underdamped: zeros or N(0,I)",
+    )
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     p.add_argument("--beta", type=float, default=getattr(_DEFAULTS, "beta", 1.0), help="Temperature scaling: effective U = beta*U (default 1.0)")
     p.add_argument("--ce-reduction", type=str, default=_DEFAULTS.ce_reduction, choices=["mean", "sum"],
@@ -68,6 +83,8 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="Parse args, build config and run_dir, print summary and exit 0 without running the chain.")
     args = p.parse_args()
+    if args.sampler == "underdamped" and args.gamma < 0:
+        raise ValueError("--gamma must be non-negative for underdamped sampler")
 
     ensure_directories()
     if args.device is not None and args.device != "":
@@ -93,6 +110,10 @@ def main() -> None:
         K=_DEFAULTS.K,
         noise_scale=args.noise_scale,
         drift_scale=args.drift_scale,
+        sampler=args.sampler,
+        gamma=args.gamma,
+        v_init=args.v_init,
+        mass=_DEFAULTS.mass,
         pretrain_steps=args.pretrain_steps,
         pretrain_lr=args.pretrain_lr,
         pretrain_weight_decay=args.pretrain_weight_decay,
@@ -113,10 +134,14 @@ def main() -> None:
     w_str = int(args.width) if args.width == int(args.width) else args.width
     alpha_str = str(args.alpha).replace("-", "m")  # 1e-5 -> 1em5 for filenames
     beta_str = str(args.beta).replace(".", "p")  # 1.0 -> 1p0, 0.5 -> 0p5 for filenames
-    # Include T and beta in run directory name
-    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}_chain{args.chain}"
+    # Include T and beta in run directory name; underdamped: gamma + _ul
+    run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}"
+    if args.sampler == "underdamped":
+        gamma_str = str(args.gamma).replace(".", "p").replace("-", "m")
+        run_name = f"{run_name}_g{gamma_str}_ul"
     if getattr(args, "drift_scale", 1.0) != 1.0:
-        run_name = f"w{w_str}_n{args.n_train}_h{args.h}_T{args.T}_a{alpha_str}_b{beta_str}_drift{args.drift_scale}_chain{args.chain}"
+        run_name = f"{run_name}_drift{args.drift_scale}"
+    run_name = f"{run_name}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
     if args.dry_run:
@@ -126,6 +151,7 @@ def main() -> None:
         print("  alpha:", config.alpha, "beta:", config.beta, "h:", config.h)
         print("  T:", config.T, "B:", config.B, "S:", config.S, "log_every:", config.log_every)
         print("  chain:", args.chain)
+        print("  sampler:", config.sampler, "gamma:", config.gamma, "v_init:", config.v_init)
         return
 
     train_loader = get_train_loader(

@@ -18,6 +18,9 @@
 #   CHAIN = 0, 1, 2, or 3 (four chains per width/h/alpha)
 #   ALPHA = optional, default 0.01
 #   BETA  = optional, default 1.0 (temperature scaling: effective U = beta*U)
+# Optional env for underdamped Langevin (BAOAB):
+#   SAMPLER=underdamped  GAMMA=1.0  V_INIT=zero|gaussian
+#   Run dir includes _g{gamma}_ul_... (see run_single_chain.py).
 # Examples:
 #   sbatch scripts/submit_chain.sh              # defaults: width=1, h=1e-5, chain=0, n_train=1024
 #   sbatch scripts/submit_chain.sh 1 1e-5 0 1024   # chain 0
@@ -49,7 +52,7 @@ mkdir -p logs/lsi_ula
 
 echo "=== Job started at $(date) ==="
 echo "=== Job ID: $SLURM_JOB_ID ==="
-echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA beta=${BETA:-1} ==="
+echo "=== Parameters: width=$WIDTH h=$H chain=$CHAIN n_train=$N_TRAIN alpha=$ALPHA beta=${BETA:-1} sampler=${SAMPLER:-overdamped} gamma=${GAMMA:-} v_init=${V_INIT:-} ==="
 echo "=== Working directory: $PROJ_DIR ==="
 
 # Activate venv first so all python3/pip commands use it (avoids ModuleNotFoundError for torch)
@@ -100,6 +103,16 @@ BETA_ARGS=""
 if [ -n "$BETA" ]; then
     BETA_ARGS="--beta $BETA"
 fi
+SAMPLER_ARGS=""
+if [ -n "$SAMPLER" ]; then
+    SAMPLER_ARGS="$SAMPLER_ARGS --sampler $SAMPLER"
+fi
+if [ -n "$GAMMA" ]; then
+    SAMPLER_ARGS="$SAMPLER_ARGS --gamma $GAMMA"
+fi
+if [ -n "$V_INIT" ]; then
+    SAMPLER_ARGS="$SAMPLER_ARGS --v-init $V_INIT"
+fi
 python3 scripts/run_single_chain.py \
     --width "$WIDTH" \
     --h "$H" \
@@ -112,12 +125,13 @@ python3 scripts/run_single_chain.py \
     --runs_dir experiments/runs \
     --root ./data \
     $BETA_ARGS \
-    $BN_ARGS
+    $BN_ARGS \
+    $SAMPLER_ARGS
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
     echo "=== Chain completed successfully at $(date) ==="
-    echo "Output: experiments/runs/w${WIDTH}_n${N_TRAIN}_h${H}_a${ALPHA}_chain${CHAIN}/"
+    echo "Output: under experiments/runs/ (see run name: w* n* h* T* a* b* [_g*_ul]* chain*)"
 else
     echo "=== Chain failed with exit code $EXIT_CODE at $(date) ==="
     exit $EXIT_CODE

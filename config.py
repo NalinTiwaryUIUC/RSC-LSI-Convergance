@@ -42,12 +42,16 @@ class RunConfig:
     arch: str = "resnet18"
     num_blocks: int = 2
 
-    # ULA
+    # ULA / Langevin
+    sampler: str = "overdamped"  # "overdamped" | "underdamped" (BAOAB)
+    gamma: float = 1.0  # friction for underdamped Langevin (ignored when sampler=overdamped)
+    v_init: str = "zero"  # "zero" | "gaussian" — initial momentum for underdamped
+    mass: float = 1.0  # reserved for future non-identity mass; identity mass for now
     h: float = 1e-4  # larger steps for more movement
     alpha: float = 0.01  # reduced from 0.05 to lessen ∇NLL/αθ cancellation; improves SNR
     ce_reduction: str = "sum"  # "mean" or "sum"; mean = stable at larger h, sum = matches log-posterior scale
     beta: float = 1.0  # temperature scaling: effective U = beta*U (likelihood scaled by beta)
-    noise_scale: float = 1.0  # standard ULA uses 1; <1 = less noise, >1 = more diffusion
+    noise_scale: float = 1.0  # overdamped: scales sqrt(2h) noise; underdamped: scales OU noise in BAOAB
     drift_scale: float = 1.0  # multiply drift term (-h*grad); 0 = noise-only (pure diffusion from init)
     clip_grad_norm: float | None = None  # S3: if set, clip grad and log grad_norm_pre_clip, grad_norm_post_clip
 
@@ -104,10 +108,13 @@ class RunConfig:
         # Ignore unknown keys so we can load configs with extra fields
         valid = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in d.items() if k in valid}
+        # Merge with defaults so new RunConfig fields (e.g. sampler) get defaults on old YAMLs
+        merged: dict[str, Any] = asdict(cls())
+        merged.update(filtered)
         # Backward compat: old configs may have "temperature" instead of "beta"
-        if "beta" not in filtered and "temperature" in d:
-            filtered["beta"] = d["temperature"]
-        return cls(**filtered)
+        if "beta" not in filtered and d and "temperature" in d:
+            merged["beta"] = d["temperature"]
+        return cls(**{k: merged[k] for k in valid})
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> RunConfig:

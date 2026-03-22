@@ -26,6 +26,7 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 - **Alternative (legacy)**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
 - **Noise scale**: Default 1.0 (standard ULA). Use `--noise-scale` to override; run `scripts/diagnose_ula.py` to tune for balance.
+- **Sampler**: Default **overdamped** Langevin (ULA). Use **`--sampler underdamped`** for **BAOAB** underdamped Langevin with **`--gamma`** (friction) and optional **`--v-init {zero,gaussian}`** (initial momentum). Each step runs **two full gradient evaluations** (about **2×** the per-step cost of overdamped). For overdamped, **`noise_scale`** scales the `√(2h)` Gaussian; for underdamped, it scales the **OU** noise in the momentum update. Run directory names include **`_g{gamma}_ul`** (e.g. `..._g1p0_ul_chain0`) so underdamped runs do not collide with overdamped.
 - **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train, num_blocks) and pass `--pretrain-path` to run and diagnose (default checkpoint name includes `_nb{num_blocks}`).
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
@@ -214,6 +215,15 @@ done
 ```
 
 Adjust SBATCH options in `scripts/submit_chain.sh` (time, mem, account, partition) for your cluster. Set `RSC_CONV_DIR` if you submit from a different directory.
+
+**Underdamped (BAOAB) on the cluster**: set environment variables before `sbatch` (they are forwarded to `run_single_chain.py`):
+
+```bash
+export SAMPLER=underdamped
+export GAMMA=1.0
+export V_INIT=zero   # or gaussian
+sbatch scripts/submit_chain.sh 1 1e-5 0 1024 0.01
+```
 
 ### 5. After jobs finish
 
