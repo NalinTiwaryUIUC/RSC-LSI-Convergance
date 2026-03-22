@@ -66,7 +66,7 @@ def main() -> None:
         type=str,
         default=_DEFAULTS.v_init,
         choices=["zero", "gaussian"],
-        help="Initial momentum for underdamped: zeros or N(0,I)",
+        help="Initial momentum for underdamped: gaussian=N(0,I) (default) or zero",
     )
     p.add_argument("--alpha", type=float, default=_DEFAULTS.alpha, help="L2 prior strength (higher = stronger pull, less drift)")
     p.add_argument("--beta", type=float, default=getattr(_DEFAULTS, "beta", 1.0), help="Temperature scaling: effective U = beta*U (default 1.0)")

@@ -204,10 +204,12 @@ def run_chain(
     vel: torch.Tensor | None = None
     if sampler == "underdamped":
         vel = torch.zeros(d, device=device, dtype=param_dtype)
-        v_init = getattr(config, "v_init", "zero")
+        v_init = getattr(config, "v_init", "gaussian")
         if v_init == "gaussian":
             g_v = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000 + 999_999)
             vel.normal_(mean=0.0, std=1.0, generator=g_v)
+        elif v_init != "zero":
+            raise ValueError(f"Unknown v_init: {v_init!r}; use 'zero' or 'gaussian'.")
 
     try:
         for step in range(1, T + 1):

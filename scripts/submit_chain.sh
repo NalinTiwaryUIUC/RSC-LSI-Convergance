@@ -19,7 +19,7 @@
 #   ALPHA = optional, default 0.01
 #   BETA  = optional, default 1.0 (temperature scaling: effective U = beta*U)
 # Optional env for underdamped Langevin (BAOAB):
-#   SAMPLER=underdamped  GAMMA=1.0  V_INIT=zero|gaussian
+#   SAMPLER=underdamped  GAMMA=1.0  V_INIT=gaussian|zero (default gaussian if unset in Python)
 #   Run dir includes _g{gamma}_ul_... (see run_single_chain.py).
 # Examples:
 #   sbatch scripts/submit_chain.sh              # defaults: width=1, h=1e-5, chain=0, n_train=1024

@@ -26,7 +26,7 @@ You can re-run the smoke and then analysis/plots to confirm end-to-end before la
 - **Alternative (legacy)**: `w ∈ {0.5, 1, 2, 4}` (optionally 8).
 - **Step sizes**: Use small h (e.g. 1e-5); optionally run `h/2` for a discretization check.
 - **Noise scale**: Default 1.0 (standard ULA). Use `--noise-scale` to override; run `scripts/diagnose_ula.py` to tune for balance.
-- **Sampler**: Default **overdamped** Langevin (ULA). Use **`--sampler underdamped`** for **BAOAB** underdamped Langevin with **`--gamma`** (friction) and optional **`--v-init {zero,gaussian}`** (initial momentum). Each step runs **two full gradient evaluations** (about **2×** the per-step cost of overdamped). For overdamped, **`noise_scale`** scales the `√(2h)` Gaussian; for underdamped, it scales the **OU** noise in the momentum update. Run directory names include **`_g{gamma}_ul`** (e.g. `..._g1p0_ul_chain0`) so underdamped runs do not collide with overdamped.
+- **Sampler**: Default **overdamped** Langevin (ULA). Use **`--sampler underdamped`** for **BAOAB** underdamped Langevin with **`--gamma`** (friction) and **`--v-init`** (`gaussian` = **N(0,I)** per parameter dimension, default; **`zero`** for zero momentum). Each step runs **two full gradient evaluations** (about **2×** the per-step cost of overdamped). For overdamped, **`noise_scale`** scales the `√(2h)` Gaussian; for underdamped, it scales the **OU** noise in the momentum update. Run directory names include **`_g{gamma}_ul`** (e.g. `..._g1p0_ul_chain0`) so underdamped runs do not collide with overdamped.
 - **Pretrain**: Default 2000 full-batch SGD steps before ULA so chains start near a mode. For standardized init across chains, run `scripts/pretrain.py` once per (width, n_train, num_blocks) and pass `--pretrain-path` to run and diagnose (default checkpoint name includes `_nb{num_blocks}`).
 - **Chains**: K = 4 per (width, h).
 - **Schedule**: T = 200_000, B = 50_000, S = 200 (≈750 saved samples per chain after burn-in).
@@ -102,6 +102,10 @@ Run analysis and plots on the run dirs for that (width, h):
 ```bash
 # Convergence (Rhat, ESS, ESS-rate)
 python3 experiments/analysis/compute_convergence.py experiments/runs/w1_n1024_h1e-5_chain{0,1,2,3} --B 50000 --S 200 -o experiments/summaries/convergence.csv
+
+# Multi-condition / auto-group report (R̂, ESS, iter_metrics trends): discovers runs under a parent dir,
+# groups by run_config (same experiment, different chain_id), writes Markdown + CSV.
+python3 scripts/report_chain_convergence.py --runs_dir experiments/runs --glob 'w1_n512*T20000*'
 
 # Proxy LSI
 python3 experiments/analysis/compute_lsi_proxy.py experiments/runs/w1_n1024_h1e-5_chain{0,1,2,3} --B 50000 --G 5 --S 200 -o experiments/summaries/lsi_proxy.csv
@@ -221,7 +225,7 @@ Adjust SBATCH options in `scripts/submit_chain.sh` (time, mem, account, partitio
 ```bash
 export SAMPLER=underdamped
 export GAMMA=1.0
-export V_INIT=zero   # or gaussian
+export V_INIT=gaussian   # default in code; use V_INIT=zero for zero momentum
 sbatch scripts/submit_chain.sh 1 1e-5 0 1024 0.01
 ```
 

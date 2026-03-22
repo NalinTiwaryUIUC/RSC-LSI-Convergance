@@ -45,7 +45,7 @@ class RunConfig:
     # ULA / Langevin
     sampler: str = "overdamped"  # "overdamped" | "underdamped" (BAOAB)
     gamma: float = 1.0  # friction for underdamped Langevin (ignored when sampler=overdamped)
-    v_init: str = "zero"  # "zero" | "gaussian" — initial momentum for underdamped
+    v_init: str = "gaussian"  # "gaussian" (N(0,I)) | "zero" — initial momentum for underdamped
     mass: float = 1.0  # reserved for future non-identity mass; identity mass for now
     h: float = 1e-4  # larger steps for more movement
     alpha: float = 0.01  # reduced from 0.05 to lessen ∇NLL/αθ cancellation; improves SNR
