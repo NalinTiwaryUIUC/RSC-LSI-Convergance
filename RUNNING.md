@@ -107,6 +107,10 @@ python3 experiments/analysis/compute_convergence.py experiments/runs/w1_n1024_h1
 # groups by run_config (same experiment, different chain_id), writes Markdown + CSV.
 python3 scripts/report_chain_convergence.py --runs_dir experiments/runs --glob 'w1_n512*T20000*'
 
+# Same script also writes **late-window analytics** (last 50% and 25% of saved samples): late-only R̂,
+# drift_z, ArviZ multi-chain ESS (bulk + tail), ESS per physical time / per grad eval. Requires `arviz`
+# (`pip install arviz`). Optional: `--late-probes f_nll,f_margin,...` and `--late-out-csv ...`.
+
 # Proxy LSI
 python3 experiments/analysis/compute_lsi_proxy.py experiments/runs/w1_n1024_h1e-5_chain{0,1,2,3} --B 50000 --G 5 --S 200 -o experiments/summaries/lsi_proxy.csv
 

@@ -83,7 +83,18 @@ class TestChainPersistence(unittest.TestCase):
                     self.assertTrue(np.isfinite(v), msg=f"iter_metrics[{k}]={v} not finite")
         # First line should have full diagnostics (step 1 or first log)
         first = lines[0]
-        for key in ("U_train", "grad_norm", "theta_norm", "f_nll", "f_margin", "snr"):
+        for key in (
+            "U_train",
+            "grad_norm",
+            "theta_norm",
+            "f_nll",
+            "f_margin",
+            "snr",
+            "dist_to_ref",
+            "dist_to_ref_sq_over_d",
+            "dist_to_ref_over_sqrt_d",
+            "dist_to_ref_over_ou_radius",
+        ):
             self.assertIn(key, first, msg=f"First iter_metrics line missing {key}")
             self.assertTrue(np.isfinite(first[key]))
         self.assertGreater(first["U_train"], 0.0)
@@ -103,6 +114,10 @@ class TestChainPersistence(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(f_nll)))
         self.assertTrue(np.all(f_nll >= 0.0), msg="f_nll (CE) should be non-negative")
         self.assertTrue(np.all(f_nll < 1e3), msg="f_nll should not explode")
+        for k in ("dist_to_ref_sq_over_d", "dist_to_ref_over_sqrt_d", "dist_to_ref_over_ou_radius"):
+            self.assertIn(k, data, msg=f"samples_metrics missing {k}")
+            self.assertEqual(len(data[k]), len(f_nll))
+            self.assertTrue(np.all(np.isfinite(data[k])), msg=k)
 
     def test_chain_bn_mode_eval(self):
         """Chain with bn_mode=eval produces valid outputs."""

@@ -116,8 +116,14 @@ def main() -> None:
     all_recs = {d.name: load_iter_metrics(d / "iter_metrics.jsonl") for d in dirs}
 
     # --- Probes: from samples_metrics and iter_metrics ---
-    sample_probes = ["f_nll", "f_margin", "f_pc1", "f_pc2", "f_proj1", "f_proj2", "f_dist"]
-    iter_probes = ["nll_probe_mean", "U_train", "U_data", "dist_to_ref"]
+    sample_probes = [
+        "f_nll", "f_margin", "f_pc1", "f_pc2", "f_proj1", "f_proj2", "f_dist",
+        "dist_to_ref_sq_over_d", "dist_to_ref_over_sqrt_d", "dist_to_ref_over_ou_radius",
+    ]
+    iter_probes = [
+        "nll_probe_mean", "U_train", "U_data", "dist_to_ref",
+        "dist_to_ref_sq_over_d", "dist_to_ref_over_sqrt_d", "dist_to_ref_over_ou_radius",
+    ]
 
     # Convergence from samples_metrics
     traces = {p: [] for p in sample_probes}

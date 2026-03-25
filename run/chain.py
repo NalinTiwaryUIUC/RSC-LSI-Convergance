@@ -184,6 +184,10 @@ def run_chain(
     f_values: Dict[str, List[float]] = {
         "f_nll": [], "f_margin": [], "f_pc1": [], "f_pc2": [],
         "f_proj1": [], "f_proj2": [], "f_dist": [],
+        # Same-time as f_dist: ||θ−θ_ref||² = f_dist; d = param_count; OU radius = sqrt(d/α)
+        "dist_to_ref_sq_over_d": [],
+        "dist_to_ref_over_sqrt_d": [],
+        "dist_to_ref_over_ou_radius": [],
     }
     grad_norm_sq: Dict[str, List[float]] = {p: [] for p in PROBES_FOR_GRAD_NORM}
     saved_count = 0
@@ -333,9 +337,20 @@ def run_chain(
                 f_dist_val = vals.get("f_dist")
                 dist_to_ref_sq = f_dist_val
                 dist_to_ref = math.sqrt(f_dist_val) if f_dist_val is not None and f_dist_val >= 0 else None
+                dist_to_ref_sq_over_d = (
+                    (dist_to_ref_sq / d) if dist_to_ref_sq is not None and d > 0 else None
+                )
+                dist_to_ref_over_sqrt_d = (
+                    (dist_to_ref / math.sqrt(d)) if dist_to_ref is not None and d > 0 else None
+                )
 
                 # C. OU "pure prior diffusion" test
                 ou_radius_pred = config.ou_radius_pred
+                dist_to_ref_over_ou_radius = (
+                    (dist_to_ref / ou_radius_pred)
+                    if dist_to_ref is not None and ou_radius_pred and ou_radius_pred > 0
+                    else None
+                )
                 theta_norm_over_ou = (theta_norm_val / ou_radius_pred) if (theta_norm_val is not None and ou_radius_pred) else None
                 t = step * config.h
                 theta_norm_sq_pred_ou = (
@@ -407,6 +422,9 @@ def run_chain(
                     # B. Locality
                     "dist_to_ref": dist_to_ref,
                     "dist_to_ref_sq": dist_to_ref_sq,
+                    "dist_to_ref_sq_over_d": dist_to_ref_sq_over_d,
+                    "dist_to_ref_over_sqrt_d": dist_to_ref_over_sqrt_d,
+                    "dist_to_ref_over_ou_radius": dist_to_ref_over_ou_radius,
                     # C. OU test
                     "theta_norm_over_ou": theta_norm_over_ou,
                     "theta_norm_sq_pred_ou": theta_norm_sq_pred_ou,
@@ -480,6 +498,18 @@ def run_chain(
                 )
                 for k, fv in vals.items():
                     f_values[k].append(fv)
+                fd = vals.get("f_dist")
+                if fd is not None and fd >= 0 and d > 0:
+                    sqrt_fd = math.sqrt(fd)
+                    f_values["dist_to_ref_sq_over_d"].append(fd / d)
+                    f_values["dist_to_ref_over_sqrt_d"].append(sqrt_fd / math.sqrt(d))
+                    ou_r = config.ou_radius_pred
+                    f_values["dist_to_ref_over_ou_radius"].append(
+                        sqrt_fd / ou_r if ou_r and ou_r > 0 else float("nan")
+                    )
+                else:
+                    for _k in ("dist_to_ref_sq_over_d", "dist_to_ref_over_sqrt_d", "dist_to_ref_over_ou_radius"):
+                        f_values[_k].append(float("nan"))
                 saved_count += 1
                 # Every G-th saved sample: compute grad norms for selected probes
                 if saved_count % G == 0:
