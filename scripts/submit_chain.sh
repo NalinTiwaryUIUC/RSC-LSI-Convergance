@@ -37,10 +37,10 @@ BETA=${6:-${BETA:-}}   # optional 6th arg or env BETA; default 1.0 in Python if 
 BN_MODE=${BN_MODE:-}   # Optional: eval | batchstat_frozen (default from RunConfig if unset)
 
 # Project root: use SLURM submission dir (you must run sbatch from the project directory)
-# Override with RSC_CONV_DIR if submitting from elsewhere
-if [ -n "$RSC_CONV_DIR" ]; then
+# Override with RSC_CONV_DIR if submitting from elsewhere (${VAR:-} safe under set -u)
+if [ -n "${RSC_CONV_DIR:-}" ]; then
     PROJ_DIR="$RSC_CONV_DIR"
-elif [ -n "$SLURM_SUBMIT_DIR" ]; then
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
     PROJ_DIR="$SLURM_SUBMIT_DIR"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

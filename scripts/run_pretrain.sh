@@ -63,10 +63,10 @@
 #
 set -euo pipefail
 
-# Project root
-if [ -n "$RSC_CONV_DIR" ]; then
+# Project root (use ${VAR:-} so set -u does not fail when vars are unset)
+if [ -n "${RSC_CONV_DIR:-}" ]; then
     PROJ_DIR="$RSC_CONV_DIR"
-elif [ -n "$SLURM_SUBMIT_DIR" ]; then
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
     PROJ_DIR="$SLURM_SUBMIT_DIR"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

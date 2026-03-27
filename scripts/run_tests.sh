@@ -100,10 +100,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Project root
-if [ -n "$RSC_CONV_DIR" ]; then
+# Project root (${VAR:-} safe under set -u)
+if [ -n "${RSC_CONV_DIR:-}" ]; then
     PROJ_DIR="$RSC_CONV_DIR"
-elif [ -n "$SLURM_SUBMIT_DIR" ]; then
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
     PROJ_DIR="$SLURM_SUBMIT_DIR"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
