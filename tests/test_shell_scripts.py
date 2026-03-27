@@ -49,20 +49,9 @@ def _file_uses_nounset(content: str) -> bool:
     return False
 
 
-# Optional cluster/project env vars: expanding "$VAR" under set -u fails if unset.
-_UNSAFE_OPTIONAL_ENV = re.compile(
-    r"\[\s+-[nz]\s+"  # [ -n | [ -z
-    r'"'
-    r"\$("
-    + "|".join(
-        (
-            "RSC_CONV_DIR",
-            "SLURM_SUBMIT_DIR",
-        )
-    )
-    + r')"'
-    r"\s*\]"
-)
+# Under set -u, `[ -n "$VAR" ]` / `[[ -n "$VAR" ]]` expands $VAR before the test; unset => error.
+# Safe: `[ -n "${VAR:-}" ]` (also applies to -z).
+_UNSAFE_BARE_DOLLAR_IN_TEST = re.compile(r'(?:\[|\[\[)\s+-[nz]\s+"\$(?!\{)')
 
 
 def test_all_shell_scripts_pass_bash_syntax_check() -> None:
@@ -95,19 +84,22 @@ def test_shellcheck_when_available() -> None:
         )
 
 
-def test_nounset_scripts_do_not_expand_unset_optional_env_unsafely() -> None:
+def test_nounset_scripts_do_not_use_unsafe_test_expansions() -> None:
     """
-    Under `set -u`, `[ -n "$RSC_CONV_DIR" ]` aborts before the test if the var is unset.
-    Use `[ -n "${RSC_CONV_DIR:-}" ]` instead (same for SLURM_SUBMIT_DIR).
+    Catches WIDTH/RSC_CONV_DIR-style failures: under nounset, `[ -n "$VAR" ]` is invalid
+    when VAR may be unset; use `[ -n "${VAR:-}" ]` or assign defaults first.
     """
     for path in _iter_shell_scripts():
         text = path.read_text(encoding="utf-8")
         if not _file_uses_nounset(text):
             continue
-        m = _UNSAFE_OPTIONAL_ENV.search(text)
-        assert m is None, (
-            f"{path}: under nounset, optional env expansion must use "
-            f'${{{m.group(1)}:-}} in [ -n/-z ] tests, not "${m.group(1)}" (match: {m.group(0)!r})'
+        bad: list[str] = []
+        for line in text.splitlines():
+            code = line.split("#", 1)[0]
+            if _UNSAFE_BARE_DOLLAR_IN_TEST.search(code):
+                bad.append(line.strip())
+        assert not bad, f"{path}: unsafe [ -n/-z ] expansion under nounset:\n" + "\n".join(
+            bad
         )
 
 
@@ -120,3 +112,53 @@ def test_run_pretrain_proj_root_block_matches_expected_safe_pattern() -> None:
     assert '[ -n "${SLURM_SUBMIT_DIR:-}" ]' in text
     assert '[ -n "$RSC_CONV_DIR"' not in text
     assert '[ -n "$SLURM_SUBMIT_DIR"' not in text
+
+
+def test_run_pretrain_binds_optional_env_before_use() -> None:
+    """
+    Defense in depth: optional env vars must be assigned VAR="${VAR:-}" before any
+    ARGS+=(... "$VAR") under set -u (catches WIDTH-style bugs that static [ -n ] scans miss).
+    """
+    path = SCRIPTS_DIR / "run_pretrain.sh"
+    text = path.read_text(encoding="utf-8")
+    for name in (
+        "WIDTH",
+        "N_TRAIN",
+        "ALPHA",
+        "PRETRAIN_STEPS",
+        "PRETRAIN_LR",
+        "PRETRAIN_WEIGHT_DECAY",
+        "OUTPUT",
+        "ARCH",
+        "NUM_BLOCKS",
+        "SNAPSHOT_STEPS",
+        "SNAPSHOT_EVERY",
+        "SNAPSHOT_DIR",
+        "DATA_DIR",
+        "ROOT",
+        "DATASET_SEED",
+        "PRETRAIN_SEED",
+        "BN_CALIBRATION_MB",
+        "VERIFY",
+    ):
+        assert f'{name}="${{{name}:-}}"' in text, f"run_pretrain.sh must bind {name} before ARGS block"
+
+
+def test_run_pretrain_args_block_runs_under_nounset_with_empty_env() -> None:
+    """Runtime smoke: same logic as ARGS build, with every optional name unset."""
+    snippet = r"""
+set -euo pipefail
+WIDTH="${WIDTH:-}"
+N_TRAIN="${N_TRAIN:-}"
+[ -n "${WIDTH:-}" ] && ARGS+=(--width "$WIDTH")
+[ -n "${N_TRAIN:-}" ] && ARGS+=(--n_train "$N_TRAIN")
+: "${ARGS[@]:-}"
+"""
+    r = subprocess.run(
+        ["bash", "-c", snippet],
+        cwd=str(REPO_ROOT),
+        env={"PATH": "/usr/bin:/bin", "HOME": "/tmp"},
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr + r.stdout

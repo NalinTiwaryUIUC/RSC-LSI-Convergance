@@ -93,26 +93,47 @@ elif [ -d "venv" ]; then
     log "Using venv"
 fi
 
-# Build base args from env (so command-line args override)
+# Under set -u, every optional env name must be bound before any "$VAR" use.
+# Empty string means "omit this flag"; CLI args still override via "$@".
+WIDTH="${WIDTH:-}"
+N_TRAIN="${N_TRAIN:-}"
+ALPHA="${ALPHA:-}"
+PRETRAIN_STEPS="${PRETRAIN_STEPS:-}"
+PRETRAIN_LR="${PRETRAIN_LR:-}"
+PRETRAIN_WEIGHT_DECAY="${PRETRAIN_WEIGHT_DECAY:-}"
+OUTPUT="${OUTPUT:-}"
+ARCH="${ARCH:-}"
+NUM_BLOCKS="${NUM_BLOCKS:-}"
+SNAPSHOT_STEPS="${SNAPSHOT_STEPS:-}"
+SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-}"
+SNAPSHOT_DIR="${SNAPSHOT_DIR:-}"
+DATA_DIR="${DATA_DIR:-}"
+ROOT="${ROOT:-}"
+DATASET_SEED="${DATASET_SEED:-}"
+PRETRAIN_SEED="${PRETRAIN_SEED:-}"
+BN_CALIBRATION_MB="${BN_CALIBRATION_MB:-}"
+VERIFY="${VERIFY:-}"
+
+# Build base args from env (so command-line args override).
 ARGS=()
-[ -n "$WIDTH" ]              && ARGS+=(--width "$WIDTH")
-[ -n "$N_TRAIN" ]            && ARGS+=(--n_train "$N_TRAIN")
-[ -n "$ALPHA" ]              && ARGS+=(--alpha "$ALPHA")
-[ -n "$PRETRAIN_STEPS" ]     && ARGS+=(--pretrain-steps "$PRETRAIN_STEPS")
-[ -n "$PRETRAIN_LR" ]        && ARGS+=(--pretrain-lr "$PRETRAIN_LR")
-[ -n "$PRETRAIN_WEIGHT_DECAY" ] && ARGS+=(--pretrain-weight-decay "$PRETRAIN_WEIGHT_DECAY")
-[ -n "$OUTPUT" ]             && ARGS+=(--output "$OUTPUT")
-[ -n "$ARCH" ]               && ARGS+=(--arch "$ARCH")
-[ -n "$NUM_BLOCKS" ]         && ARGS+=(--num-blocks "$NUM_BLOCKS")
-[ -n "$SNAPSHOT_STEPS" ]     && ARGS+=(--snapshot-steps "$SNAPSHOT_STEPS")
-[ -n "$SNAPSHOT_EVERY" ]     && ARGS+=(--snapshot-every "$SNAPSHOT_EVERY")
-[ -n "$SNAPSHOT_DIR" ]       && ARGS+=(--snapshot-dir "$SNAPSHOT_DIR")
-[ -n "$DATA_DIR" ]           && ARGS+=(--data_dir "$DATA_DIR")
-[ -n "$ROOT" ]               && ARGS+=(--root "$ROOT")
-[ -n "$DATASET_SEED" ]       && ARGS+=(--dataset-seed "$DATASET_SEED")
-[ -n "$PRETRAIN_SEED" ]      && ARGS+=(--pretrain-seed "$PRETRAIN_SEED")
-[ -n "$BN_CALIBRATION_MB" ]  && ARGS+=(--bn-calibration-microbatch "$BN_CALIBRATION_MB")
-[ "${VERIFY:-0}" = "1" ]     && ARGS+=(--verify)
+[ -n "${WIDTH:-}" ]              && ARGS+=(--width "$WIDTH")
+[ -n "${N_TRAIN:-}" ]            && ARGS+=(--n_train "$N_TRAIN")
+[ -n "${ALPHA:-}" ]              && ARGS+=(--alpha "$ALPHA")
+[ -n "${PRETRAIN_STEPS:-}" ]     && ARGS+=(--pretrain-steps "$PRETRAIN_STEPS")
+[ -n "${PRETRAIN_LR:-}" ]        && ARGS+=(--pretrain-lr "$PRETRAIN_LR")
+[ -n "${PRETRAIN_WEIGHT_DECAY:-}" ] && ARGS+=(--pretrain-weight-decay "$PRETRAIN_WEIGHT_DECAY")
+[ -n "${OUTPUT:-}" ]             && ARGS+=(--output "$OUTPUT")
+[ -n "${ARCH:-}" ]               && ARGS+=(--arch "$ARCH")
+[ -n "${NUM_BLOCKS:-}" ]         && ARGS+=(--num-blocks "$NUM_BLOCKS")
+[ -n "${SNAPSHOT_STEPS:-}" ]     && ARGS+=(--snapshot-steps "$SNAPSHOT_STEPS")
+[ -n "${SNAPSHOT_EVERY:-}" ]     && ARGS+=(--snapshot-every "$SNAPSHOT_EVERY")
+[ -n "${SNAPSHOT_DIR:-}" ]       && ARGS+=(--snapshot-dir "$SNAPSHOT_DIR")
+[ -n "${DATA_DIR:-}" ]           && ARGS+=(--data_dir "$DATA_DIR")
+[ -n "${ROOT:-}" ]               && ARGS+=(--root "$ROOT")
+[ -n "${DATASET_SEED:-}" ]       && ARGS+=(--dataset-seed "$DATASET_SEED")
+[ -n "${PRETRAIN_SEED:-}" ]      && ARGS+=(--pretrain-seed "$PRETRAIN_SEED")
+[ -n "${BN_CALIBRATION_MB:-}" ]  && ARGS+=(--bn-calibration-microbatch "$BN_CALIBRATION_MB")
+[ "$VERIFY" = "1" ]          && ARGS+=(--verify)
 
 log "=== Pretrain run started at $(date) ==="
 log "=== Working directory: $PROJ_DIR ==="

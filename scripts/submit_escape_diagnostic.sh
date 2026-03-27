@@ -97,7 +97,7 @@ case "$INIT" in
   I2)
     PRETRAIN_PATH="${PRETRAIN_EARLY:-}"
     STEP_TAG=""
-    if [[ -n "$PRETRAIN_PATH" ]]; then
+    if [[ -n "${PRETRAIN_PATH:-}" ]]; then
       base="$(basename "$PRETRAIN_PATH")"
       if [[ "$base" =~ _step([0-9]+)\.pt$ ]]; then
         STEP_TAG="step${BASH_REMATCH[1]}"
@@ -115,7 +115,7 @@ case "$INIT" in
     ;;
 esac
 
-if [[ -z "$PRETRAIN_PATH" ]]; then
+if [[ -z "${PRETRAIN_PATH:-}" ]]; then
   log "ERROR: set PRETRAIN_FINAL (I1/I3) or PRETRAIN_EARLY / PRETRAIN_PATH (I2)"
   exit 1
 fi
@@ -129,37 +129,38 @@ elif [[ -d "venv" ]]; then
 fi
 
 ARGS=()
-[[ -n "$WIDTH" ]] && ARGS+=(--width "$WIDTH")
-[[ -n "$H" ]] && ARGS+=(--h "$H")
-[[ -n "$CHAIN" ]] && ARGS+=(--chain "$CHAIN")
-[[ -n "$N_TRAIN" ]] && ARGS+=(--n_train "$N_TRAIN")
-[[ -n "$PROBE_SIZE" ]] && ARGS+=(--probe_size "$PROBE_SIZE")
-[[ -n "$T" ]] && ARGS+=(--T "$T")
-[[ -n "$B" ]] && ARGS+=(--B "$B")
-[[ -n "$S" ]] && ARGS+=(--S "$S")
-[[ -n "$LOG_EVERY" ]] && ARGS+=(--log-every "$LOG_EVERY")
-[[ -n "$PRETRAIN_STEPS" ]] && ARGS+=(--pretrain-steps "$PRETRAIN_STEPS")
-[[ -n "$PRETRAIN_LR" ]] && ARGS+=(--pretrain-lr "$PRETRAIN_LR")
-[[ -n "$PRETRAIN_PATH" ]] && ARGS+=(--pretrain-path "$PRETRAIN_PATH")
-[[ -n "$BN_MODE" ]] && ARGS+=(--bn-mode "$BN_MODE")
-[[ -n "$BN_CALIBRATION_STEPS" ]] && ARGS+=(--bn-calibration-steps "$BN_CALIBRATION_STEPS")
-[[ -n "$DATA_DIR" ]] && ARGS+=(--data_dir "$DATA_DIR")
-[[ -n "$RUNS_DIR" ]] && ARGS+=(--runs_dir "$RUNS_DIR")
-[[ -n "$ROOT" ]] && ARGS+=(--root "$ROOT")
-[[ -n "$DATASET_SEED" ]] && ARGS+=(--dataset-seed "$DATASET_SEED")
-[[ -n "$CHAIN_SEED" ]] && ARGS+=(--chain-seed "$CHAIN_SEED")
-[[ -n "$DEVICE" ]] && ARGS+=(--device "$DEVICE")
-[[ -n "$NOISE_SCALE" ]] && ARGS+=(--noise-scale "$NOISE_SCALE")
-[[ -n "$ALPHA" ]] && ARGS+=(--alpha "$ALPHA")
-[[ -n "$BETA" ]] && ARGS+=(--beta "$BETA")
-[[ -n "$ARCH" ]] && ARGS+=(--arch "$ARCH")
-[[ -n "$NUM_BLOCKS" ]] && ARGS+=(--num-blocks "$NUM_BLOCKS")
-[[ -n "$SAMPLER" ]] && ARGS+=(--sampler "$SAMPLER")
-[[ -n "$GAMMA" ]] && ARGS+=(--gamma "$GAMMA")
-[[ -n "$CE_REDUCTION" ]] && ARGS+=(--ce-reduction "$CE_REDUCTION")
-[[ -n "$INIT_PERTURB_SIGMA" ]] && ARGS+=(--init-perturb-sigma "$INIT_PERTURB_SIGMA")
-[[ -n "$INIT_PERTURB_REFERENCE" ]] && ARGS+=(--init-perturb-reference "$INIT_PERTURB_REFERENCE")
-[[ -n "$RUN_SUFFIX" ]] && ARGS+=(--run-suffix "$RUN_SUFFIX")
+# ${VAR:-} in tests: safe under set -u when a var is unset (defaults above still apply).
+[[ -n "${WIDTH:-}" ]] && ARGS+=(--width "$WIDTH")
+[[ -n "${H:-}" ]] && ARGS+=(--h "$H")
+[[ -n "${CHAIN:-}" ]] && ARGS+=(--chain "$CHAIN")
+[[ -n "${N_TRAIN:-}" ]] && ARGS+=(--n_train "$N_TRAIN")
+[[ -n "${PROBE_SIZE:-}" ]] && ARGS+=(--probe_size "$PROBE_SIZE")
+[[ -n "${T:-}" ]] && ARGS+=(--T "$T")
+[[ -n "${B:-}" ]] && ARGS+=(--B "$B")
+[[ -n "${S:-}" ]] && ARGS+=(--S "$S")
+[[ -n "${LOG_EVERY:-}" ]] && ARGS+=(--log-every "$LOG_EVERY")
+[[ -n "${PRETRAIN_STEPS:-}" ]] && ARGS+=(--pretrain-steps "$PRETRAIN_STEPS")
+[[ -n "${PRETRAIN_LR:-}" ]] && ARGS+=(--pretrain-lr "$PRETRAIN_LR")
+[[ -n "${PRETRAIN_PATH:-}" ]] && ARGS+=(--pretrain-path "$PRETRAIN_PATH")
+[[ -n "${BN_MODE:-}" ]] && ARGS+=(--bn-mode "$BN_MODE")
+[[ -n "${BN_CALIBRATION_STEPS:-}" ]] && ARGS+=(--bn-calibration-steps "$BN_CALIBRATION_STEPS")
+[[ -n "${DATA_DIR:-}" ]] && ARGS+=(--data_dir "$DATA_DIR")
+[[ -n "${RUNS_DIR:-}" ]] && ARGS+=(--runs_dir "$RUNS_DIR")
+[[ -n "${ROOT:-}" ]] && ARGS+=(--root "$ROOT")
+[[ -n "${DATASET_SEED:-}" ]] && ARGS+=(--dataset-seed "$DATASET_SEED")
+[[ -n "${CHAIN_SEED:-}" ]] && ARGS+=(--chain-seed "$CHAIN_SEED")
+[[ -n "${DEVICE:-}" ]] && ARGS+=(--device "$DEVICE")
+[[ -n "${NOISE_SCALE:-}" ]] && ARGS+=(--noise-scale "$NOISE_SCALE")
+[[ -n "${ALPHA:-}" ]] && ARGS+=(--alpha "$ALPHA")
+[[ -n "${BETA:-}" ]] && ARGS+=(--beta "$BETA")
+[[ -n "${ARCH:-}" ]] && ARGS+=(--arch "$ARCH")
+[[ -n "${NUM_BLOCKS:-}" ]] && ARGS+=(--num-blocks "$NUM_BLOCKS")
+[[ -n "${SAMPLER:-}" ]] && ARGS+=(--sampler "$SAMPLER")
+[[ -n "${GAMMA:-}" ]] && ARGS+=(--gamma "$GAMMA")
+[[ -n "${CE_REDUCTION:-}" ]] && ARGS+=(--ce-reduction "$CE_REDUCTION")
+[[ -n "${INIT_PERTURB_SIGMA:-}" ]] && ARGS+=(--init-perturb-sigma "$INIT_PERTURB_SIGMA")
+[[ -n "${INIT_PERTURB_REFERENCE:-}" ]] && ARGS+=(--init-perturb-reference "$INIT_PERTURB_REFERENCE")
+[[ -n "${RUN_SUFFIX:-}" ]] && ARGS+=(--run-suffix "$RUN_SUFFIX")
 
 log "=== Escape diagnostic chain ==="
 log "INIT=$INIT PRETRAIN_PATH=$PRETRAIN_PATH"
