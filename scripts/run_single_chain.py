@@ -37,7 +37,7 @@ def main() -> None:
         "--pretrain-weight-decay",
         type=float,
         default=_DEFAULTS.pretrain_weight_decay,
-        help="Weight decay for pretraining SGD (default 0.0; nonzero adds optimizer L2 term).",
+        help="SGD weight_decay λ when pretraining without --pretrain-path; -1 = λ = α/n_train; 0 = no L2.",
     )
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips per-chain pretrain")
     p.add_argument("--bn-mode", type=str, default=_DEFAULTS.bn_mode, choices=["eval", "batchstat_frozen"],
@@ -82,6 +82,26 @@ def main() -> None:
                    help="Number of residual blocks for small_resnet_ln (ignored for resnet18).")
     p.add_argument("--dry-run", action="store_true",
                    help="Parse args, build config and run_dir, print summary and exit 0 without running the chain.")
+    p.add_argument(
+        "--init-perturb-sigma",
+        type=float,
+        default=0.0,
+        help="After loading --pretrain-path, add θ ← θ + σξ (ξ~N(0,I)) before sampling; probe reference stays "
+        "the loaded checkpoint if --init-perturb-reference checkpoint (default).",
+    )
+    p.add_argument(
+        "--init-perturb-reference",
+        type=str,
+        default="checkpoint",
+        choices=["checkpoint", "start"],
+        help="With --init-perturb-sigma > 0: 'checkpoint' = dist_to_ref vs clean θ*; 'start' = reference = perturbed θ.",
+    )
+    p.add_argument(
+        "--run-suffix",
+        type=str,
+        default="",
+        help="Optional tag inserted into run dir name before _chain (e.g. initI1, initI2_step1200, initI3_sigma0p02).",
+    )
     args = p.parse_args()
     if args.sampler == "underdamped" and args.gamma < 0:
         raise ValueError("--gamma must be non-negative for underdamped sampler")
@@ -124,6 +144,8 @@ def main() -> None:
         dataset_seed=args.dataset_seed,
         chain_seed=args.chain_seed if args.chain_seed is not None else args.dataset_seed + args.chain * 1000,
         probe_projection_seed=args.probe_projection_seed,
+        init_perturb_sigma=args.init_perturb_sigma,
+        init_perturb_reference=args.init_perturb_reference,
     )
     if args.microbatch_size is not None:
         if args.microbatch_size <= 0 or args.n_train % args.microbatch_size != 0:
@@ -141,6 +163,9 @@ def main() -> None:
         run_name = f"{run_name}_g{gamma_str}_ul"
     if getattr(args, "drift_scale", 1.0) != 1.0:
         run_name = f"{run_name}_drift{args.drift_scale}"
+    if args.run_suffix.strip():
+        safe = args.run_suffix.strip().replace("/", "_").replace(" ", "_")
+        run_name = f"{run_name}_{safe}"
     run_name = f"{run_name}_chain{args.chain}"
     run_dir = Path(args.runs_dir) / run_name
 
@@ -152,6 +177,9 @@ def main() -> None:
         print("  T:", config.T, "B:", config.B, "S:", config.S, "log_every:", config.log_every)
         print("  chain:", args.chain)
         print("  sampler:", config.sampler, "gamma:", config.gamma, "v_init:", config.v_init)
+        print("  init_perturb_sigma:", config.init_perturb_sigma, "init_perturb_reference:", config.init_perturb_reference)
+        if args.run_suffix.strip():
+            print("  run_suffix:", args.run_suffix.strip())
         return
 
     train_loader = get_train_loader(

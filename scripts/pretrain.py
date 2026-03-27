@@ -2,13 +2,17 @@
 Pretrain a model with fixed random seed. Saves checkpoint for use by run_single_chain and diagnose_ula.
 Use the same checkpoint across all chains for a given (width, n_train) to standardize initialization.
 
-Objective: loss = ce_mean + 0.5 * (alpha / n_train) * ||θ||² — same minimizer as CE_sum + (α/2)||θ||².
-BN: pretrain in train(); after pretrain, BN calibration pass (forward in train mode, fixed microbatch_size);
-    then eval() for sampling.
+Objective: mean CE + (α/(2n))||θ||² on the n-point subset (n = n_train), via optimizer weight_decay:
+  default λ = α/n so PyTorch's (λ/2)||θ||² equals (α/(2n))||θ||².
+  torch.optim.SGD(..., momentum=0.9, nesterov=False, weight_decay=λ); use --pretrain-weight-decay -1 for λ = α/n.
+
+Legacy explicit loss term (α/2n)||θ||² matching *sum* CE is removed; use the same ce_reduction at sampling time.
+
+Data: full batch on the fixed subset, eval transforms (no train augmentation). No gradient clipping by default.
 
 Usage:
-  python scripts/pretrain.py --width 0.1 --n_train 1024 --alpha 0.1 --pretrain-steps 2000
-  python scripts/pretrain.py --width 0.1 --n_train 1024 -o experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
+  python scripts/pretrain.py --width 1 --n_train 512 --alpha 0.3 --pretrain-steps 2000 --snapshot-every 25
+  python scripts/pretrain.py --width 0.1 -o experiments/checkpoints/out.pt
 """
 from __future__ import annotations
 
@@ -44,21 +48,110 @@ def set_pretrain_seed(seed: int = PRETRAIN_SEED) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def _bn_calibrate(
+    model: torch.nn.Module,
+    x_train: torch.Tensor,
+    n_train: int,
+    microbatch: int,
+) -> None:
+    model.train()
+    with torch.no_grad():
+        for start in range(0, n_train, microbatch):
+            end = min(start + microbatch, n_train)
+            _ = model(x_train[start:end])
+    model.eval()
+
+
+def _metrics_eval(
+    model: torch.nn.Module,
+    x_train: torch.Tensor,
+    y_train: torch.Tensor,
+) -> tuple[float, float]:
+    with torch.no_grad():
+        logits = model(x_train)
+        ce_mean = F.cross_entropy(logits, y_train, reduction="mean").item()
+        pred = logits.argmax(dim=1)
+        acc = (pred == y_train).float().mean().item() * 100
+    return ce_mean, acc
+
+
+def _save_checkpoint(
+    path: Path,
+    model: torch.nn.Module,
+    width: float,
+    n_train: int,
+    alpha: float,
+    arch: str,
+    num_blocks: int,
+    step: int | None = None,
+    *,
+    weight_decay_effective: float | None = None,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict = {
+        "state_dict": model.state_dict(),
+        "width": width,
+        "n_train": n_train,
+        "alpha": alpha,
+        "arch": arch,
+        "num_blocks": num_blocks,
+    }
+    if step is not None:
+        payload["pretrain_step"] = step
+    if weight_decay_effective is not None:
+        payload["pretrain_weight_decay_effective"] = weight_decay_effective
+    torch.save(payload, path)
+
+
+def _default_snapshot_paths(
+    base_dir: Path,
+    w_str: str | float,
+    n_train: int,
+    num_blocks: int,
+    step: int,
+) -> Path:
+    return base_dir / f"pretrain_w{w_str}_n{n_train}_nb{num_blocks}_step{step}.pt"
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Pretrain model with fixed seed (MAP objective + BN calibration)")
     p.add_argument("--width", type=float, default=1.0, help="Width multiplier")
     p.add_argument("--n_train", type=int, default=1024, help="Training subset size")
-    p.add_argument("--alpha", type=float, default=0.1, help="L2 prior strength (same as chain; scales loss L2 as alpha/n_train)")
-    p.add_argument("--pretrain-steps", type=int, default=2000, help="SGD steps")
-    p.add_argument("--pretrain-lr", type=float, default=0.02, help="Learning rate (L2 penalty in loss; weight decay optional)")
+    p.add_argument(
+        "--alpha",
+        type=float,
+        default=0.3,
+        help="Prior strength α; default WD uses λ = α/n_train when --pretrain-weight-decay < 0.",
+    )
+    p.add_argument("--pretrain-steps", type=int, default=2000, help="SGD steps (stop early if train acc saturates; keep snapshots)")
+    p.add_argument("--pretrain-lr", type=float, default=0.01, help="SGD learning rate (try 0.005 / 0.01 / 0.02 mini-sweep)")
     p.add_argument(
         "--pretrain-weight-decay",
         type=float,
-        default=0.0,
-        help="Weight decay for SGD during pretraining (default 0.0; nonzero adds optimizer L2 term in addition to explicit loss penalty).",
+        default=-1.0,
+        help="SGD weight_decay λ for (λ/2)||θ||². -1 = λ = α/n_train. 0 = no L2.",
     )
     p.add_argument("-o", "--output", type=str, default=None,
                    help="Output path; default: experiments/checkpoints/pretrain_w{WIDTH}_n{n_train}_nb{num_blocks}.pt")
+    p.add_argument(
+        "--snapshot-steps",
+        type=str,
+        default="",
+        help="Comma-separated step indices (1..pretrain-steps) at which to save intermediate checkpoints "
+        "after BN calibration (files: ..._step{N}.pt).",
+    )
+    p.add_argument(
+        "--snapshot-every",
+        type=int,
+        default=25,
+        help="Save a snapshot every K steps (default 25; set 0 to disable unless --snapshot-steps set).",
+    )
+    p.add_argument(
+        "--snapshot-dir",
+        type=str,
+        default=None,
+        help="Directory for intermediate *_step*.pt snapshots (default: experiments/checkpoints).",
+    )
     p.add_argument("--bn-calibration-microbatch", type=int, default=BN_CALIBRATION_MICROBATCH,
                    help="Microbatch size for BN calibration forward pass (fixed across widths)")
     p.add_argument("--data_dir", type=str, default="experiments/data")
@@ -72,6 +165,10 @@ def main() -> None:
                    help="Number of residual blocks for small_resnet_ln (ignored for resnet18).")
     args = p.parse_args()
 
+    n_train = max(int(args.n_train), 1)
+    wd = float(args.pretrain_weight_decay)
+    if wd < 0:
+        wd = float(args.alpha) / float(n_train)
     set_pretrain_seed(args.pretrain_seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -96,62 +193,93 @@ def main() -> None:
         arch=args.arch,
         num_blocks=args.num_blocks,
     ).to(device)
-    # By default, no weight_decay; L2 penalty is explicit in the loss to match the sampling target.
-    # If pretrain_weight_decay > 0, an optimizer L2 term is also applied.
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=args.pretrain_lr,
         momentum=0.9,
-        weight_decay=args.pretrain_weight_decay,
+        weight_decay=wd,
+        nesterov=False,
     )
 
-    # Objective: ce_mean + 0.5 * (alpha / n_train) * ||θ||² — same minimizer as CE_sum + (α/2)||θ||²
+    w_str = int(args.width) if args.width == int(args.width) else args.width
+    out_dir = Path("experiments/checkpoints")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    snap_dir = Path(args.snapshot_dir) if args.snapshot_dir else out_dir
+    snap_dir.mkdir(parents=True, exist_ok=True)
+
+    # Parse snapshot steps
+    snapshot_set: set[int] = set()
+    if args.snapshot_steps.strip():
+        for part in args.snapshot_steps.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            snapshot_set.add(int(part))
+    if args.snapshot_every and args.snapshot_every > 0:
+        k = args.snapshot_every
+        for s in range(k, args.pretrain_steps + 1, k):
+            snapshot_set.add(s)
+    snapshot_set = {s for s in snapshot_set if 1 <= s <= args.pretrain_steps}
+    snapshot_list = sorted(snapshot_set)
+
+    microbatch = args.bn_calibration_microbatch
+
+    # U_train = mean CE + (wd/2)||θ||² via optimizer weight_decay (default wd = α/n_train)
     model.train()
-    for _ in range(args.pretrain_steps):
+    for step in range(1, args.pretrain_steps + 1):
         optimizer.zero_grad(set_to_none=True)
         logits = model(x_train)
-        ce_mean = F.cross_entropy(logits, y_train, reduction="mean")
-        reg = (0.5 * args.alpha / args.n_train) * sum((p * p).sum() for p in model.parameters())
-        loss = ce_mean + reg
+        loss = F.cross_entropy(logits, y_train, reduction="mean")
         loss.backward()
         optimizer.step()
 
-    # BN calibration: forward passes in train mode (no grad) with fixed microbatch_size to populate running stats
-    model.train()
-    microbatch = args.bn_calibration_microbatch
-    with torch.no_grad():
-        for start in range(0, args.n_train, microbatch):
-            end = min(start + microbatch, args.n_train)
-            _ = model(x_train[start:end])
-    model.eval()
+        if step in snapshot_set:
+            _bn_calibrate(model, x_train, args.n_train, microbatch)
+            ce_m, acc = _metrics_eval(model, x_train, y_train)
+            snap_path = _default_snapshot_paths(snap_dir, w_str, args.n_train, args.num_blocks, step)
+            _save_checkpoint(
+                snap_path,
+                model,
+                args.width,
+                args.n_train,
+                args.alpha,
+                args.arch,
+                args.num_blocks,
+                step=step,
+                weight_decay_effective=wd,
+            )
+            print(
+                f"Snapshot step {step}: mean CE = {ce_m:.4f}, accuracy = {acc:.2f}% (eval) -> {snap_path}"
+            )
+            model.train()
 
-    # Final metrics on same batch (eval mode for reproducibility)
-    with torch.no_grad():
-        logits = model(x_train)
-        ce_mean = F.cross_entropy(logits, y_train, reduction="mean").item()
-        pred = logits.argmax(dim=1)
-        acc = (pred == y_train).float().mean().item() * 100
+    # Final BN calibration + full eval (same as before)
+    _bn_calibrate(model, x_train, args.n_train, microbatch)
+    ce_mean, acc = _metrics_eval(model, x_train, y_train)
     print(f"Pretrain done: mean CE = {ce_mean:.4f}, accuracy = {acc:.2f}% (on train batch, eval mode)")
 
     out_path = args.output
     if out_path is None:
-        w_str = int(args.width) if args.width == int(args.width) else args.width
-        out_dir = Path("experiments/checkpoints")
-        out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"pretrain_w{w_str}_n{args.n_train}_nb{args.num_blocks}.pt"
 
     out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    # state_dict includes BN running_mean/var after calibration (part of eval target)
-    torch.save({
-        "state_dict": model.state_dict(),
-        "width": args.width,
-        "n_train": args.n_train,
-        "alpha": args.alpha,
-        "arch": args.arch,
-        "num_blocks": args.num_blocks,
-    }, out_path)
+    _save_checkpoint(
+        out_path,
+        model,
+        args.width,
+        args.n_train,
+        args.alpha,
+        args.arch,
+        args.num_blocks,
+        step=None,
+        weight_decay_effective=wd,
+    )
     print("Wrote", out_path)
+    print(
+        f"Pretrain MAP setup: mean CE + (λ/2)||θ||² with λ={wd} (α/n_train when default WD; SGD lr={args.pretrain_lr}, momentum=0.9, nesterov=False)"
+    )
+    if snapshot_list:
+        print(f"Intermediate snapshots requested at steps: {snapshot_list}")
 
     # Run 1: Reload verify — re-instantiate, load from disk, eval on same batch
     if args.verify:

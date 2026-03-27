@@ -40,11 +40,19 @@ def _pretrain_model(
     lr: float,
     weight_decay: float,
     device: torch.device,
+    alpha: float = 0.3,
+    n_train: int = 512,
 ) -> None:
-    """Simple full-batch SGD pretraining before ULA."""
+    """Full-batch SGD pretraining before ULA: mean CE + (λ/2)||θ||² via optimizer weight_decay (nesterov=False)."""
     if steps <= 0:
         return
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
+    n = max(int(n_train), 1)
+    wd = float(weight_decay)
+    if wd < 0:
+        wd = float(alpha) / float(n)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=lr, momentum=0.9, weight_decay=wd, nesterov=False
+    )
     if isinstance(train_data, tuple):
         x, y = train_data
     else:
@@ -122,7 +130,24 @@ def run_chain(
     if pretrain_path is not None:
         ckpt = torch.load(pretrain_path, map_location=device, weights_only=True)
         model.load_state_dict(ckpt["state_dict"], strict=True)
+        theta_ref = flatten_params(model).clone().detach()
+        sigma_pert = float(getattr(config, "init_perturb_sigma", 0.0) or 0.0)
+        ref_mode = getattr(config, "init_perturb_reference", "checkpoint")
+        if sigma_pert > 0:
+            if ref_mode not in ("checkpoint", "start"):
+                raise ValueError(f"init_perturb_reference must be 'checkpoint' or 'start', got {ref_mode!r}")
+            g = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000)
+            xi = torch.randn(d, device=device, generator=g)
+            unflatten_like(theta_ref + sigma_pert * xi, model)
+            if ref_mode == "checkpoint":
+                theta0_flat = theta_ref.clone().detach()
+            else:
+                theta0_flat = flatten_params(model).clone().detach()
+        else:
+            theta0_flat = theta_ref.clone().detach()
     else:
+        if float(getattr(config, "init_perturb_sigma", 0.0) or 0.0) > 0:
+            raise ValueError("init_perturb_sigma > 0 requires pretrain_path (loaded checkpoint)")
         theta0 = flatten_params(model).clone().detach()
         sigma_init = config.sigma_init_scale * (theta0.std().item() + 1e-8)
         g = torch.Generator(device=device).manual_seed(config.chain_seed + chain_id * 1000)
@@ -133,11 +158,13 @@ def run_chain(
             train_data,
             steps=config.pretrain_steps,
             lr=config.pretrain_lr,
-            weight_decay=getattr(config, "pretrain_weight_decay", 0.0),
+            weight_decay=getattr(config, "pretrain_weight_decay", -1.0),
             device=device,
+            alpha=float(config.alpha),
+            n_train=int(config.n_train),
         )
 
-    theta0_flat = flatten_params(model).clone().detach()  # reference for probes
+        theta0_flat = flatten_params(model).clone().detach()  # reference for probes
     theta0_norm_sq = (theta0_flat.norm().item()) ** 2  # for OU theta_norm_sq_pred
     if config.bn_mode == "eval":
         bn_cal = getattr(config, "bn_calibration_steps", 0)

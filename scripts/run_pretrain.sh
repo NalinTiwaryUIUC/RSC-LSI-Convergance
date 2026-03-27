@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=lsi_ula
-#SBATCH --time=48:00:00                    # Job run time (hh:mm:ss) - 48h for full T=200k chain
+#SBATCH --job-name=rsc_pretrain
+#SBATCH --time=48:00:00
 #SBATCH --mail-type=ALL,FAIL
-#SBATCH --mail-user="nalint2@illinois.edu"  # Email when job starts/finishes/fails
+#SBATCH --mail-user="nalint2@illinois.edu"
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
@@ -10,38 +10,58 @@
 #SBATCH --mem=32G
 #SBATCH --account=arindamb-cs-eng
 #SBATCH --partition=eng-research-gpu
-#SBATCH --output=logs/lsi_ula/lsi_ula_%j.out
-#SBATCH --error=logs/lsi_ula/lsi_ula_%j.err
+#SBATCH --output=logs/pretrain/pretrain_%j.out
+#SBATCH --error=logs/pretrain/pretrain_%j.err
 
 #
 # Run SGD pretraining (scripts/pretrain.py) with logging. Use from project root.
 #
 # Pass any pretrain.py arguments after the script; they override env defaults.
+# Comma-separated flags (--snapshot-steps) are safest as trailing CLI args (Slurm --export
+# breaks on commas inside values).
 #
 # Env defaults (optional):
-#   WIDTH              --width (default: 1.0)
-#   N_TRAIN            --n_train (default: 1024)
-#   ALPHA              --alpha (default: 0.1)
-#   PRETRAIN_STEPS     --pretrain-steps (default: 2000)
-#   PRETRAIN_LR        --pretrain-lr (default: 0.02)
-#   OUTPUT             -o/--output (default: experiments/checkpoints/pretrain_w{W}_n{N}_nb{NUM_BLOCKS}.pt)
-#   ARCH               --arch (default: resnet18)
-#   NUM_BLOCKS         --num-blocks (default: 2)
-#   DATA_DIR           --data_dir
-#   ROOT               --root (default: ./data)
-#   DATASET_SEED       --dataset-seed (default: 42)
-#   PRETRAIN_SEED      --pretrain-seed (default: 42)
-#   BN_CALIBRATION_MB  --bn-calibration-microbatch (default: 256)
-#   VERIFY             set to 1 for --verify
-#   LOG_DIR            directory for log file (default: logs/pretrain)
+#   WIDTH                 --width (default: 1.0)
+#   N_TRAIN               --n_train (default: 1024)
+#   ALPHA                 --alpha (pretrain.py default: 0.3; MAP uses WD=α when PRETRAIN_WEIGHT_DECAY=-1)
+#   PRETRAIN_STEPS        --pretrain-steps (default: 2000)
+#   PRETRAIN_LR           --pretrain-lr (pretrain.py default: 0.01; try 0.005 / 0.01 / 0.02)
+#   PRETRAIN_WEIGHT_DECAY --pretrain-weight-decay (-1 = use α; 0 = no L2)
+#   OUTPUT                -o/--output (default: experiments/checkpoints/pretrain_w{W}_n{N}_nb{NUM_BLOCKS}.pt)
+#   ARCH                  --arch (default: resnet18)
+#   NUM_BLOCKS            --num-blocks (default: 2)
+#   SNAPSHOT_STEPS        --snapshot-steps (comma list; also pass as CLI if using sbatch --export)
+#   SNAPSHOT_EVERY        --snapshot-every (pretrain.py default: 25; use 0 to disable periodic snaps)
+#   SNAPSHOT_DIR          --snapshot-dir (intermediate *_step*.pt; default experiments/checkpoints)
+#   DATA_DIR              --data_dir
+#   ROOT                  --root (default: ./data)
+#   DATASET_SEED          --dataset-seed (default: 42)
+#   PRETRAIN_SEED         --pretrain-seed (default: 42)
+#   BN_CALIBRATION_MB     --bn-calibration-microbatch (default: 256)
+#   VERIFY                set to 1 for --verify
+#   LOG_DIR               directory for log file (default: logs/pretrain)
 #
-# Examples:
+# Examples (local):
 #   ./scripts/run_pretrain.sh --width 0.1 --n_train 1024
-#   ./scripts/run_pretrain.sh --width 0.1 --n_train 1024 --alpha 0.1 -o experiments/checkpoints/pretrain_w0.1_n1024_nb2.pt
-#   WIDTH=0.1 N_TRAIN=1024 ./scripts/run_pretrain.sh
-#   PRETRAIN_STEPS=500 ./scripts/run_pretrain.sh --width 0.5 --n_train 2048
+#   ./scripts/run_pretrain.sh --snapshot-steps 500,1000,1500 --snapshot-dir experiments/checkpoints/my_snaps -o experiments/checkpoints/out.pt
 #
-set -e
+# SBATCH — pretrain w=1 for escape diagnostic (snapshots for I2); run from project root:
+#   mkdir -p logs/pretrain experiments/checkpoints/escape_diag_run01/snaps_w1
+#   sbatch scripts/run_pretrain.sh --width 1 --n_train 512 --alpha 0.3 --pretrain-steps 4000 --pretrain-lr 0.01 \
+#     --arch small_resnet_ln --num-blocks 1 --data_dir experiments/data --root ./data \
+#     --snapshot-dir experiments/checkpoints/escape_diag_run01/snaps_w1 --snapshot-every 25 \
+#     --snapshot-steps 800,1200,1600,2000,2400,3200 \
+#     -o experiments/checkpoints/escape_diag_run01/pretrain_w1_n512_nb1_final.pt
+#
+# SBATCH — pretrain w=4 (submit after w=1 or in parallel if you have two GPUs):
+#   mkdir -p experiments/checkpoints/escape_diag_run01/snaps_w4
+#   sbatch scripts/run_pretrain.sh --width 4 --n_train 512 --alpha 0.3 --pretrain-steps 4000 --pretrain-lr 0.01 \
+#     --arch small_resnet_ln --num-blocks 1 --data_dir experiments/data --root ./data \
+#     --snapshot-dir experiments/checkpoints/escape_diag_run01/snaps_w4 --snapshot-every 25 \
+#     --snapshot-steps 800,1200,1600,2000,2400,3200 \
+#     -o experiments/checkpoints/escape_diag_run01/pretrain_w4_n512_nb1_final.pt
+#
+set -euo pipefail
 
 # Project root
 if [ -n "$RSC_CONV_DIR" ]; then
@@ -80,9 +100,13 @@ ARGS=()
 [ -n "$ALPHA" ]              && ARGS+=(--alpha "$ALPHA")
 [ -n "$PRETRAIN_STEPS" ]     && ARGS+=(--pretrain-steps "$PRETRAIN_STEPS")
 [ -n "$PRETRAIN_LR" ]        && ARGS+=(--pretrain-lr "$PRETRAIN_LR")
+[ -n "$PRETRAIN_WEIGHT_DECAY" ] && ARGS+=(--pretrain-weight-decay "$PRETRAIN_WEIGHT_DECAY")
 [ -n "$OUTPUT" ]             && ARGS+=(--output "$OUTPUT")
 [ -n "$ARCH" ]               && ARGS+=(--arch "$ARCH")
 [ -n "$NUM_BLOCKS" ]         && ARGS+=(--num-blocks "$NUM_BLOCKS")
+[ -n "$SNAPSHOT_STEPS" ]     && ARGS+=(--snapshot-steps "$SNAPSHOT_STEPS")
+[ -n "$SNAPSHOT_EVERY" ]     && ARGS+=(--snapshot-every "$SNAPSHOT_EVERY")
+[ -n "$SNAPSHOT_DIR" ]       && ARGS+=(--snapshot-dir "$SNAPSHOT_DIR")
 [ -n "$DATA_DIR" ]           && ARGS+=(--data_dir "$DATA_DIR")
 [ -n "$ROOT" ]               && ARGS+=(--root "$ROOT")
 [ -n "$DATASET_SEED" ]       && ARGS+=(--dataset-seed "$DATASET_SEED")

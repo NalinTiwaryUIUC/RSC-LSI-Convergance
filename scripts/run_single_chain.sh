@@ -51,6 +51,9 @@
 #   SAMPLER            --sampler (overdamped | underdamped)
 #   GAMMA              --gamma (underdamped / BAOAB friction)
 #   V_INIT             --v-init (zero | gaussian)
+#   INIT_PERTURB_SIGMA   --init-perturb-sigma (requires PRETRAIN_PATH; I3 diagnostic)
+#   INIT_PERTURB_REFERENCE  --init-perturb-reference (checkpoint | start)
+#   RUN_SUFFIX         --run-suffix (e.g. initI1, initI3_sigma0p02)
 #   LOG_DIR            directory for log file (default: logs/chain)
 #
 # Examples:
@@ -126,6 +129,9 @@ ARGS=()
 [ -n "$SAMPLER" ]                && ARGS+=(--sampler "$SAMPLER")
 [ -n "$GAMMA" ]                  && ARGS+=(--gamma "$GAMMA")
 [ -n "$V_INIT" ]                && ARGS+=(--v-init "$V_INIT")
+[ -n "$INIT_PERTURB_SIGMA" ]    && ARGS+=(--init-perturb-sigma "$INIT_PERTURB_SIGMA")
+[ -n "$INIT_PERTURB_REFERENCE" ] && ARGS+=(--init-perturb-reference "$INIT_PERTURB_REFERENCE")
+[ -n "$RUN_SUFFIX" ]            && ARGS+=(--run-suffix "$RUN_SUFFIX")
 
 log "=== Chain run started at $(date) ==="
 log "=== Working directory: $PROJ_DIR ==="

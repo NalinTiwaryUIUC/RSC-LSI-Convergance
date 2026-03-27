@@ -59,13 +59,19 @@ class RunConfig:
     log_every: int = 1000  # write iter_metrics every N steps (1 = every step)
     progress_print_every: int = 10_000  # print progress to stdout every N steps (0 = disable)
     pretrain_steps: int = 2000  # number of full-batch SGD steps before ULA (more = start nearer a mode)
-    pretrain_lr: float = 0.02  # learning rate for pretraining
-    pretrain_weight_decay: float = 0.0  # weight decay for pretraining SGD (0.0 = off; nonzero adds optimizer L2)
+    pretrain_lr: float = 0.01  # SGD lr for scripts/pretrain.py and in-chain pretrain (when no checkpoint)
+    # PyTorch SGD: weight_decay=λ adds (λ/2)||θ||². Default sentinel -1 => λ = α/n_train (matches (α/(2n))||θ||² with mean CE).
+    # 0.0 = no L2; >0 = explicit λ.
+    pretrain_weight_decay: float = -1.0
     T: int = 200_000
     B: int = 50_000
     S: int = 200
     K: int = 4
     sigma_init_scale: float = 1e-4
+    # After loading --pretrain-path: add θ ← θ + σ·ξ (ξ ~ N(0,I)); probe reference θ0 stays clean checkpoint if
+    # init_perturb_reference == "checkpoint" (escape diagnostics). Ignored when sigma is 0 or no pretrain_path.
+    init_perturb_sigma: float = 0.0
+    init_perturb_reference: str = "checkpoint"  # "checkpoint" | "start"
 
     # Probes / LSI
     grad_norm_stride: int = 5  # compute grad norms every G saved samples

@@ -46,8 +46,8 @@ def main() -> None:
     p.add_argument(
         "--pretrain-weight-decay",
         type=float,
-        default=0.0,
-        help="Weight decay for SGD during pretrain in this diagnostic (default 0.0).",
+        default=-1.0,
+        help="SGD weight_decay for pretrain; -1 = α/n_train; 0 = off.",
     )
     p.add_argument("--pretrain-path", type=str, default=None, help="Path to pretrained checkpoint; if set, skips pretrain")
     p.add_argument("--data_dir", type=str, default=None)
@@ -109,11 +109,15 @@ def main() -> None:
         ckpt = torch.load(args.pretrain_path, map_location=device, weights_only=True)
         model.load_state_dict(ckpt["state_dict"], strict=True)
     elif config.pretrain_steps > 0:
+        pwd = float(args.pretrain_weight_decay)
+        if pwd < 0:
+            pwd = float(alpha) / float(max(config.n_train, 1))
         optimizer = torch.optim.SGD(
             model.parameters(),
             lr=config.pretrain_lr,
             momentum=0.9,
-            weight_decay=args.pretrain_weight_decay,
+            weight_decay=pwd,
+            nesterov=False,
         )
         model.train()
         for _ in range(config.pretrain_steps):
