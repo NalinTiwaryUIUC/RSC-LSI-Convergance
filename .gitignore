@@ -42,3 +42,17 @@ data/*.zip
 # Logs are small but you may or may not want them under version control.
 # Comment out the next line if you want to keep SLURM logs as well.
 # logs/
+experiments/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+experiments/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
