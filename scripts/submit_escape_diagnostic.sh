@@ -12,7 +12,10 @@
 #SBATCH --output=logs/escape_diag/escape_diag_%j.out
 #SBATCH --error=logs/escape_diag/escape_diag_%j.err
 #
-# Escape-time diagnostic wrapper (I1 / I2 / I3 init). Run from project root.
+# Escape-time diagnostic wrapper (I1 / I2 / I3 init).
+# Submit from the project root (cd there first) so SLURM_SUBMIT_DIR points at the repo; Slurm runs a
+# copy of this script from /var/spool/slurmd/..., so BASH_SOURCE alone is NOT a reliable project path.
+# Or: export RSC_CONV_DIR=/path/to/RSC_Conv before sbatch.
 #
 # Recommended: LOG_EVERY=1 (or 2) so τ_escape from iter_metrics is not quantized by coarse logging.
 #
@@ -40,8 +43,16 @@
 
 set -euo pipefail
 
-PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJ_DIR"
+# Project root (same pattern as run_pretrain.sh / run_single_chain.sh — required under Slurm spool copy)
+if [ -n "${RSC_CONV_DIR:-}" ]; then
+    PROJ_DIR="$RSC_CONV_DIR"
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
+    PROJ_DIR="$SLURM_SUBMIT_DIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+cd "$PROJ_DIR" || { echo "ERROR: Cannot cd to $PROJ_DIR"; exit 1; }
 
 LOG_DIR="${LOG_DIR:-logs/escape_diag}"
 mkdir -p "$LOG_DIR"

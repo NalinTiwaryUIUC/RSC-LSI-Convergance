@@ -22,6 +22,16 @@ def _iter_shell_scripts() -> list[Path]:
     return sorted(SCRIPTS_DIR.glob("*.sh"))
 
 
+def _slurm_batch_script_paths() -> list[Path]:
+    """Scripts with real #SBATCH directives (first ~30 lines)."""
+    out: list[Path] = []
+    for path in _iter_shell_scripts():
+        lines = path.read_text(encoding="utf-8").splitlines()[:30]
+        if any(l.startswith("#SBATCH --") for l in lines):
+            out.append(path)
+    return out
+
+
 def _find_shellcheck() -> str | None:
     import shutil
 
@@ -142,6 +152,57 @@ def test_run_pretrain_binds_optional_env_before_use() -> None:
         "VERIFY",
     ):
         assert f'{name}="${{{name}:-}}"' in text, f"run_pretrain.sh must bind {name} before ARGS block"
+
+
+def test_slurm_batch_scripts_resolve_proj_dir_for_spool_execution() -> None:
+    """
+    Slurm executes a *copy* of the batch script under /var/spool/slurmd/...; dirname(BASH_SOURCE)/..
+    is then NOT the repo. Every Slurm batch entrypoint must prefer RSC_CONV_DIR, then SLURM_SUBMIT_DIR
+    (directory from which sbatch was run), then BASH_SOURCE fallback (local ./scripts/foo.sh).
+    """
+    required_substrings = (
+        '[ -n "${RSC_CONV_DIR:-}" ]',
+        '[ -n "${SLURM_SUBMIT_DIR:-}" ]',
+        'PROJ_DIR="$RSC_CONV_DIR"',
+        'PROJ_DIR="$SLURM_SUBMIT_DIR"',
+        'dirname "${BASH_SOURCE[0]}"',
+    )
+    for path in _slurm_batch_script_paths():
+        text = path.read_text(encoding="utf-8")
+        missing = [s for s in required_substrings if s not in text]
+        assert not missing, (
+            f"{path.name}: add the standard PROJ_DIR block (see run_pretrain.sh). Missing fragments: {missing}"
+        )
+
+
+def test_proj_dir_prefers_slurm_submit_dir_when_set() -> None:
+    """Runtime: when SLURM_SUBMIT_DIR is set, PROJ_DIR must match it (simulates cluster submit dir)."""
+    snippet = r"""
+set -euo pipefail
+if [ -n "${RSC_CONV_DIR:-}" ]; then
+    PROJ_DIR="$RSC_CONV_DIR"
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
+    PROJ_DIR="$SLURM_SUBMIT_DIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+printf '%s' "$PROJ_DIR"
+"""
+    want = str(REPO_ROOT)
+    r = subprocess.run(
+        ["bash", "-c", snippet],
+        cwd=str(REPO_ROOT),
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": "/tmp",
+            "SLURM_SUBMIT_DIR": want,
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == want, f"expected PROJ_DIR={want!r}, got {r.stdout!r}"
 
 
 def test_run_pretrain_args_block_runs_under_nounset_with_empty_env() -> None:
