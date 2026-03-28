@@ -64,15 +64,16 @@ echo "    --tau-from $TAU_FROM --fill-missing-tau $FILL_MISSING_TAU"
 if [[ "$THRESHOLD_GRID" == "preset" ]]; then
   PRESET_GRID_EXTRA=()
   if [[ -n "${ABS_NLL_GE:-}" ]]; then
-    PRESET_GRID_EXTRA+=(--abs-nll-ge "$ABS_NLL_GE")
+    PRESET_GRID_EXTRA+=(--abs-nll-ge="$ABS_NLL_GE")
   fi
   if [[ -n "${ABS_F_MARGIN_LE:-}" ]]; then
-    PRESET_GRID_EXTRA+=(--abs-f-margin-le "$ABS_F_MARGIN_LE")
+    # Equals form so values like -0.2,-0.25 are one argument (argparse rejects "--opt -0.2,...")
+    PRESET_GRID_EXTRA+=(--abs-f-margin-le="$ABS_F_MARGIN_LE")
   fi
   echo "=== 2b/3 analyze_escape_diagnostic (preset threshold grid) ==="
   echo "    --threshold-grid preset --fill-missing-tau $FILL_MISSING_TAU"
-  [[ -n "${ABS_NLL_GE:-}" ]] && echo "    --abs-nll-ge $ABS_NLL_GE"
-  [[ -n "${ABS_F_MARGIN_LE:-}" ]] && echo "    --abs-f-margin-le $ABS_F_MARGIN_LE"
+  [[ -n "${ABS_NLL_GE:-}" ]] && echo "    --abs-nll-ge=$ABS_NLL_GE"
+  [[ -n "${ABS_F_MARGIN_LE:-}" ]] && echo "    --abs-f-margin-le=$ABS_F_MARGIN_LE"
   "$PY" scripts/analyze_escape_diagnostic.py \
     --runs-dir experiments/runs \
     --parent-glob "$RUN_GLOB" \

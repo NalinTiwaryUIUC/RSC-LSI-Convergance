@@ -27,7 +27,8 @@ Usage:
 
   # Same preset grid plus absolute predictive levels (pick c from pooled iter range across inits):
   python scripts/analyze_escape_diagnostic.py ... --threshold-grid preset \\
-      --abs-nll-ge 1.45,1.50,1.55 --abs-f-margin-le -0.2,-0.25,-0.3
+      --abs-nll-ge=1.45,1.50,1.55 --abs-f-margin-le=-0.2,-0.25,-0.3
+  # Note: use --opt=value when the list starts with '-' (argparse otherwise treats it as a flag).
 """
 from __future__ import annotations
 
@@ -396,15 +397,18 @@ def main() -> None:
         "--abs-nll-ge",
         type=str,
         default="",
-        help="With --threshold-grid preset only: comma-separated c values; τ = first step with "
-        "nll_probe_mean >= c (absolute; same c for every chain). Pick c from pooled iter range across inits.",
+        metavar="C1,C2,...",
+        help="With --threshold-grid preset only: comma-separated c; τ = first step with nll_probe_mean >= c. "
+        "Prefer --abs-nll-ge=1.45,1.50 so a leading '-' is not parsed as a new flag.",
     )
     ap.add_argument(
         "--abs-f-margin-le",
         type=str,
         default="",
-        help="With --threshold-grid preset only: comma-separated c values; τ = first step with "
-        "f_margin <= c (absolute). Use negative margins as logged (e.g. -0.25,-0.3).",
+        metavar="C1,C2,...",
+        help="With --threshold-grid preset only: comma-separated c; τ = first step with f_margin <= c. "
+        "Values are usually negative: use equals form --abs-f-margin-le=-0.2,-0.25 (required; else argparse "
+        "treats '-0.2,...' as a missing/invalid option).",
     )
     ap.add_argument(
         "--min-aligned-length",
