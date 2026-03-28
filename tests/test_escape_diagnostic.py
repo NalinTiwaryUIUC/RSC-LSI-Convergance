@@ -154,6 +154,49 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
         self.assertEqual(out["f_margin_le_init_minus_0p5"], 100)
         self.assertIsNone(out["f_margin_le_init_minus_1"])
 
+    def test_absolute_predictive_thresholds(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_escape_diagnostic import compute_preset_taus_for_chain  # noqa: E402
+
+        recs = [
+            {
+                "step": 0,
+                "dist_to_ref_over_sqrt_d": 0.01,
+                "dist_to_ref_over_ou_radius": 0.01,
+                "nll_probe_mean": 1.0,
+                "f_margin": 0.0,
+            },
+            {
+                "step": 50,
+                "dist_to_ref_over_sqrt_d": 0.01,
+                "dist_to_ref_over_ou_radius": 0.01,
+                "nll_probe_mean": 1.6,
+                "f_margin": -0.1,
+            },
+            {
+                "step": 80,
+                "dist_to_ref_over_sqrt_d": 0.01,
+                "dist_to_ref_over_ou_radius": 0.01,
+                "nll_probe_mean": 1.6,
+                "f_margin": -0.4,
+            },
+        ]
+        out = compute_preset_taus_for_chain(
+            recs,
+            fill_missing_tau="none",
+            abs_nll_ge=(1.5,),
+            abs_f_margin_le=(-0.25,),
+        )
+        self.assertEqual(out["nll_abs_ge_1p5"], 50)
+        self.assertEqual(out["f_margin_abs_le_m0p25"], 80)
+
+    def test_parse_csv_floats_dedupes(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_escape_diagnostic import parse_csv_floats  # noqa: E402
+
+        self.assertEqual(parse_csv_floats("1, 1, 2"), (1.0, 2.0))
+        self.assertEqual(parse_csv_floats("-0.2, -0.3"), (-0.2, -0.3))
+
 
 if __name__ == "__main__":
     unittest.main()

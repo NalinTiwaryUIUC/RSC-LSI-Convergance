@@ -23,6 +23,10 @@
 #   export THRESHOLD_GRID=preset
 #   export FILL_MISSING_TAU=none
 #   ./scripts/cluster_summarize_escape_w1.sh
+#
+# Optional absolute predictive levels (same c for all chains; pick from pooled iter range across inits):
+#   export ABS_NLL_GE='1.45,1.50,1.55'
+#   export ABS_F_MARGIN_LE='-0.2,-0.25,-0.3'
 
 set -euo pipefail
 
@@ -58,14 +62,24 @@ echo "    --tau-from $TAU_FROM --fill-missing-tau $FILL_MISSING_TAU"
   --out-csv "$SUMMARY_DIR/escape_w1_tau_escape.csv"
 
 if [[ "$THRESHOLD_GRID" == "preset" ]]; then
+  PRESET_GRID_EXTRA=()
+  if [[ -n "${ABS_NLL_GE:-}" ]]; then
+    PRESET_GRID_EXTRA+=(--abs-nll-ge "$ABS_NLL_GE")
+  fi
+  if [[ -n "${ABS_F_MARGIN_LE:-}" ]]; then
+    PRESET_GRID_EXTRA+=(--abs-f-margin-le "$ABS_F_MARGIN_LE")
+  fi
   echo "=== 2b/3 analyze_escape_diagnostic (preset threshold grid) ==="
   echo "    --threshold-grid preset --fill-missing-tau $FILL_MISSING_TAU"
+  [[ -n "${ABS_NLL_GE:-}" ]] && echo "    --abs-nll-ge $ABS_NLL_GE"
+  [[ -n "${ABS_F_MARGIN_LE:-}" ]] && echo "    --abs-f-margin-le $ABS_F_MARGIN_LE"
   "$PY" scripts/analyze_escape_diagnostic.py \
     --runs-dir experiments/runs \
     --parent-glob "$RUN_GLOB" \
     --auto-group \
     --threshold-grid preset \
     --fill-missing-tau "$FILL_MISSING_TAU" \
+    "${PRESET_GRID_EXTRA[@]}" \
     --out-csv "$SUMMARY_DIR/escape_w1_tau_threshold_grid.csv"
 fi
 

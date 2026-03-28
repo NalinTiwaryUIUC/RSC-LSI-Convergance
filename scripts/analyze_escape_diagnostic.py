@@ -24,6 +24,10 @@ Usage:
   #   d/sqrt(d) ∈ {0.05,0.10,0.15}, ou_radius ∈ {0.03,0.06,0.09},
   #   nll ≥ n0+{0.25,0.50}, f_margin ≤ m0-{0.5,1.0}
   python scripts/analyze_escape_diagnostic.py ... --auto-group --threshold-grid preset --fill-missing-tau none
+
+  # Same preset grid plus absolute predictive levels (pick c from pooled iter range across inits):
+  python scripts/analyze_escape_diagnostic.py ... --threshold-grid preset \\
+      --abs-nll-ge 1.45,1.50,1.55 --abs-f-margin-le -0.2,-0.25,-0.3
 """
 from __future__ import annotations
 
@@ -114,6 +118,36 @@ def _thr_label(x: float) -> str:
     return f"{x:g}".replace(".", "p")
 
 
+def _thr_label_signed(x: float) -> str:
+    """Stable id for signed levels: 1.4 -> 1p4, -0.25 -> m0p25."""
+    neg = x < 0
+    ax = abs(x)
+    body = f"{ax:g}".replace(".", "p")
+    return f"m{body}" if neg else body
+
+
+def _unique_floats_preserve(xs: list[float]) -> tuple[float, ...]:
+    seen: set[float] = set()
+    out: list[float] = []
+    for x in xs:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return tuple(out)
+
+
+def parse_csv_floats(s: str | None) -> tuple[float, ...]:
+    """Parse '1.5, -0.2' -> (1.5, -0.2); dedupe preserving order."""
+    if s is None or not str(s).strip():
+        return ()
+    vals: list[float] = []
+    for part in str(s).split(","):
+        part = part.strip()
+        if part:
+            vals.append(float(part))
+    return _unique_floats_preserve(vals)
+
+
 PRESET_GRID_D_SQRT = (0.05, 0.10, 0.15)
 PRESET_GRID_OU = (0.03, 0.06, 0.09)
 PRESET_GRID_NLL_PLUS = (0.25, 0.50)
@@ -131,6 +165,19 @@ def preset_criterion_ids() -> tuple[str, ...]:
         ids.append(f"nll_ge_init_plus_{_thr_label(d)}")
     for m in PRESET_GRID_MARGIN_DROP:
         ids.append(f"f_margin_le_init_minus_{_thr_label(m)}")
+    return tuple(ids)
+
+
+def extended_preset_criterion_ids(
+    abs_nll_ge: tuple[float, ...] = (),
+    abs_f_margin_le: tuple[float, ...] = (),
+) -> tuple[str, ...]:
+    """Preset relative+geometry ids, then absolute predictive criteria (order matches compute_preset_taus_for_chain)."""
+    ids = list(preset_criterion_ids())
+    for c in abs_nll_ge:
+        ids.append(f"nll_abs_ge_{_thr_label_signed(c)}")
+    for c in abs_f_margin_le:
+        ids.append(f"f_margin_abs_le_{_thr_label_signed(c)}")
     return tuple(ids)
 
 
@@ -163,10 +210,13 @@ def compute_preset_taus_for_chain(
     recs: list[dict[str, Any]],
     *,
     fill_missing_tau: str,
+    abs_nll_ge: tuple[float, ...] = (),
+    abs_f_margin_le: tuple[float, ...] = (),
 ) -> dict[str, int | None]:
     """
     First-crossing τ per criterion. Geometry uses >= fixed c; predictive uses per-chain
-    first logged nll_0 and m_0 with fixed additive offsets.
+    first logged nll_0 and m_0 with fixed additive offsets. Optional absolute predictive
+    rules: nll_probe_mean >= c, f_margin <= c (same c for all chains).
     """
     recs_sorted = sorted(recs, key=lambda r: int(r.get("step", 0)))
     last_s = last_logged_step(recs_sorted)
@@ -239,6 +289,30 @@ def compute_preset_taus_for_chain(
                     and float(r["f_margin"]) <= th
                 ),
             )
+        out[cid] = fill_missing_tau_single(t, fill_missing_tau, recs, last_s, "f_margin")
+
+    for c in abs_nll_ge:
+        cid = f"nll_abs_ge_{_thr_label_signed(c)}"
+        t = first_crossing(
+            recs,
+            lambda r, th=c: (
+                isinstance(r.get("nll_probe_mean"), (int, float))
+                and math.isfinite(float(r["nll_probe_mean"]))
+                and float(r["nll_probe_mean"]) >= th
+            ),
+        )
+        out[cid] = fill_missing_tau_single(t, fill_missing_tau, recs, last_s, "nll")
+
+    for c in abs_f_margin_le:
+        cid = f"f_margin_abs_le_{_thr_label_signed(c)}"
+        t = first_crossing(
+            recs,
+            lambda r, th=c: (
+                isinstance(r.get("f_margin"), (int, float))
+                and math.isfinite(float(r["f_margin"]))
+                and float(r["f_margin"]) <= th
+            ),
+        )
         out[cid] = fill_missing_tau_single(t, fill_missing_tau, recs, last_s, "f_margin")
 
     return out
@@ -319,12 +393,28 @@ def main() -> None:
         "Ignores --tau-from and single-threshold flags for τ definitions.",
     )
     ap.add_argument(
+        "--abs-nll-ge",
+        type=str,
+        default="",
+        help="With --threshold-grid preset only: comma-separated c values; τ = first step with "
+        "nll_probe_mean >= c (absolute; same c for every chain). Pick c from pooled iter range across inits.",
+    )
+    ap.add_argument(
+        "--abs-f-margin-le",
+        type=str,
+        default="",
+        help="With --threshold-grid preset only: comma-separated c values; τ = first step with "
+        "f_margin <= c (absolute). Use negative margins as logged (e.g. -0.25,-0.3).",
+    )
+    ap.add_argument(
         "--min-aligned-length",
         type=int,
         default=4,
         help="Minimum post-τ aligned samples per chain required to report escape-aligned R̂.",
     )
     args = ap.parse_args()
+    abs_nll_ge = parse_csv_floats(args.abs_nll_ge)
+    abs_f_margin_le = parse_csv_floats(args.abs_f_margin_le)
 
     runs_base = Path(args.runs_dir)
     if not runs_base.is_absolute():
@@ -355,8 +445,13 @@ def main() -> None:
         print(f"\n=== Group: {gname} ({len(gpaths)} runs) ===")
 
         if args.threshold_grid == "preset":
-            criterion_ids = list(preset_criterion_ids())
-            taus: dict[str, list[int | None]] = {cid: [] for cid in criterion_ids}
+            criterion_ids = list(
+                extended_preset_criterion_ids(
+                    abs_nll_ge=abs_nll_ge,
+                    abs_f_margin_le=abs_f_margin_le,
+                )
+            )
+            taus = {cid: [] for cid in criterion_ids}
         else:
             criterion_ids = None
             taus = {
@@ -406,7 +501,10 @@ def main() -> None:
 
             if args.threshold_grid == "preset":
                 tau_dict = compute_preset_taus_for_chain(
-                    recs, fill_missing_tau=args.fill_missing_tau
+                    recs,
+                    fill_missing_tau=args.fill_missing_tau,
+                    abs_nll_ge=abs_nll_ge,
+                    abs_f_margin_le=abs_f_margin_le,
                 )
                 assert criterion_ids is not None
                 for cid in criterion_ids:
