@@ -82,6 +82,11 @@ SECONDARY_ITER_KEYS = (
     "delta_U",
     "noise_step_norm",
     "drift_step_norm",
+    # U decomposition (escape / MAP diagnostics; iter_metrics from run/chain.py)
+    "U_prior",
+    "U_data",
+    "ce_mean_train",
+    "U_data_minus_ce",
 )
 
 # Extra saved probe directions (same length as f_nll in samples_metrics.npz when present)
