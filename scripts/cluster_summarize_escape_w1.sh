@@ -10,6 +10,12 @@
 #
 # Override globs if your run names differ (e.g. different h, T, n_train):
 #   export RUN_GLOB='w1_n512_h5e-06_T100000*_ul_initI*_chain*'
+#
+# Escape τ policy (default: no arbitrary cutoffs — τ = extremal logged step per metric):
+#   TAU_FROM=extremal  — τ_d/τ_ou = first argmax of dist metrics; τ_f = argmin f_margin; τ_nll = argmax nll
+#   TAU_FROM=threshold — use thresh-d-sqrt / thresh-ou / f-margin-max / nll-rise-*; see analyze_escape_diagnostic.py -h
+#   FILL_MISSING_TAU   — when TAU_FROM=threshold only: none | last | extremal (default extremal)
+#   export TAU_FROM=extremal
 #   ./scripts/cluster_summarize_escape_w1.sh
 
 set -euo pipefail
@@ -20,6 +26,8 @@ cd "$PROJ_DIR"
 
 RUN_GLOB="${RUN_GLOB:-w1_*_ul_initI*_chain*}"
 SUMMARY_DIR="${SUMMARY_DIR:-experiments/summaries}"
+TAU_FROM="${TAU_FROM:-extremal}"
+FILL_MISSING_TAU="${FILL_MISSING_TAU:-extremal}"
 mkdir -p "$SUMMARY_DIR"
 
 PY="${PYTHON:-python3}"
@@ -33,10 +41,13 @@ echo "=== 1/3 report_chain_convergence (samples_metrics + iter_metrics + late-wi
   --late-out-csv "$SUMMARY_DIR/escape_w1_chain_convergence_summary_late.csv"
 
 echo "=== 2/3 analyze_escape_diagnostic (τ_escape, aligned R̂) ==="
+echo "    --tau-from $TAU_FROM --fill-missing-tau $FILL_MISSING_TAU"
 "$PY" scripts/analyze_escape_diagnostic.py \
   --runs-dir experiments/runs \
   --parent-glob "$RUN_GLOB" \
   --auto-group \
+  --tau-from "$TAU_FROM" \
+  --fill-missing-tau "$FILL_MISSING_TAU" \
   --out-csv "$SUMMARY_DIR/escape_w1_tau_escape.csv"
 
 echo "=== 3/3 summarize_escape_init_comparison (pooled trends + U_prior/U_data ratios) ==="
