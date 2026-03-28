@@ -124,6 +124,36 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
 
         self.assertEqual(chain_prefix("w1_n64_h1e-5_T10_a0.3_b1p0_initI1_chain3"), "w1_n64_h1e-5_T10_a0.3_b1p0_initI1")
 
+    def test_preset_threshold_grid_crossings(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_escape_diagnostic import compute_preset_taus_for_chain  # noqa: E402
+
+        recs = [
+            {
+                "step": 0,
+                "dist_to_ref_over_sqrt_d": 0.01,
+                "dist_to_ref_over_ou_radius": 0.01,
+                "nll_probe_mean": 2.0,
+                "f_margin": -0.1,
+            },
+            {
+                "step": 100,
+                "dist_to_ref_over_sqrt_d": 0.12,
+                "dist_to_ref_over_ou_radius": 0.07,
+                "nll_probe_mean": 2.4,
+                "f_margin": -0.8,
+            },
+        ]
+        out = compute_preset_taus_for_chain(recs, fill_missing_tau="none")
+        self.assertEqual(out["d_sqrt_ge_0p05"], 100)
+        self.assertEqual(out["d_sqrt_ge_0p1"], 100)
+        self.assertIsNone(out["d_sqrt_ge_0p15"])
+        self.assertEqual(out["ou_ge_0p03"], 100)
+        self.assertEqual(out["nll_ge_init_plus_0p25"], 100)
+        self.assertIsNone(out["nll_ge_init_plus_0p5"])
+        self.assertEqual(out["f_margin_le_init_minus_0p5"], 100)
+        self.assertIsNone(out["f_margin_le_init_minus_1"])
+
 
 if __name__ == "__main__":
     unittest.main()
