@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run on the cluster from the RSC_Conv project root (after module load / venv as you usually do).
 # Produces:
-#   - experiments/summaries/escape_w1_chain_convergence_report.md   (R̂, ESS, late-window probes, iter_metrics)
-#   - experiments/summaries/escape_w1_chain_convergence_summary.csv
-#   - experiments/summaries/escape_w1_chain_convergence_summary_late.csv
-#   - experiments/summaries/escape_w1_tau_escape.csv                 (τ_escape + aligned R̂ from analyze_escape_diagnostic)
-#   - experiments/summaries/escape_w1_tau_threshold_grid.csv         (optional: THRESHOLD_GRID=preset)
-#   - experiments/summaries/escape_w1_init_comparison.md              (pooled I1 vs I2 vs I3 iter trends + prior ratios)
-#   - experiments/summaries/escape_w1_init_comparison.csv
+#   - experiments/summaries/${OUT_PREFIX}_chain_convergence_report.md   (R̂, ESS, late-window probes, iter_metrics)
+#   - experiments/summaries/${OUT_PREFIX}_chain_convergence_summary.csv
+#   - experiments/summaries/${OUT_PREFIX}_chain_convergence_summary_late.csv
+#   - experiments/summaries/${OUT_PREFIX}_tau_escape.csv                 (τ_escape + aligned R̂ from analyze_escape_diagnostic)
+#   - experiments/summaries/${OUT_PREFIX}_tau_threshold_grid.csv         (optional: THRESHOLD_GRID=preset)
+#   - experiments/summaries/${OUT_PREFIX}_init_comparison.md             (pooled I1 vs I2 vs I3 iter trends + prior ratios)
+#   - experiments/summaries/${OUT_PREFIX}_init_comparison.csv
 #
 # Override globs if your run names differ (e.g. different h, T, n_train):
 #   export RUN_GLOB='w1_n512_h5e-06_T100000*_ul_initI*_chain*'
@@ -36,6 +36,7 @@ cd "$PROJ_DIR"
 
 RUN_GLOB="${RUN_GLOB:-w1_*_ul_initI*_chain*}"
 SUMMARY_DIR="${SUMMARY_DIR:-experiments/summaries}"
+OUT_PREFIX="${OUT_PREFIX:-escape_w1}"
 TAU_FROM="${TAU_FROM:-extremal}"
 FILL_MISSING_TAU="${FILL_MISSING_TAU:-extremal}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-none}"
@@ -47,9 +48,9 @@ echo "=== 1/3 report_chain_convergence (samples_metrics + iter_metrics + late-wi
 "$PY" scripts/report_chain_convergence.py \
   --runs_dir experiments/runs \
   --glob "$RUN_GLOB" \
-  --out_md "$SUMMARY_DIR/escape_w1_chain_convergence_report.md" \
-  --out_csv "$SUMMARY_DIR/escape_w1_chain_convergence_summary.csv" \
-  --late-out-csv "$SUMMARY_DIR/escape_w1_chain_convergence_summary_late.csv"
+  --out_md "$SUMMARY_DIR/${OUT_PREFIX}_chain_convergence_report.md" \
+  --out_csv "$SUMMARY_DIR/${OUT_PREFIX}_chain_convergence_summary.csv" \
+  --late-out-csv "$SUMMARY_DIR/${OUT_PREFIX}_chain_convergence_summary_late.csv"
 
 echo "=== 2/3 analyze_escape_diagnostic (τ_escape, aligned R̂) ==="
 echo "    --tau-from $TAU_FROM --fill-missing-tau $FILL_MISSING_TAU"
@@ -59,7 +60,7 @@ echo "    --tau-from $TAU_FROM --fill-missing-tau $FILL_MISSING_TAU"
   --auto-group \
   --tau-from "$TAU_FROM" \
   --fill-missing-tau "$FILL_MISSING_TAU" \
-  --out-csv "$SUMMARY_DIR/escape_w1_tau_escape.csv"
+  --out-csv "$SUMMARY_DIR/${OUT_PREFIX}_tau_escape.csv"
 
 if [[ "$THRESHOLD_GRID" == "preset" ]]; then
   PRESET_GRID_EXTRA=()
@@ -81,20 +82,20 @@ if [[ "$THRESHOLD_GRID" == "preset" ]]; then
     --threshold-grid preset \
     --fill-missing-tau "$FILL_MISSING_TAU" \
     "${PRESET_GRID_EXTRA[@]}" \
-    --out-csv "$SUMMARY_DIR/escape_w1_tau_threshold_grid.csv"
+    --out-csv "$SUMMARY_DIR/${OUT_PREFIX}_tau_threshold_grid.csv"
 fi
 
 echo "=== 3/3 summarize_escape_init_comparison (pooled trends + U_prior/U_data ratios) ==="
 "$PY" scripts/summarize_escape_init_comparison.py \
   --runs-dir experiments/runs \
   --glob "$RUN_GLOB" \
-  --out-md "$SUMMARY_DIR/escape_w1_init_comparison.md" \
-  --out-csv "$SUMMARY_DIR/escape_w1_init_comparison.csv"
+  --out-md "$SUMMARY_DIR/${OUT_PREFIX}_init_comparison.md" \
+  --out-csv "$SUMMARY_DIR/${OUT_PREFIX}_init_comparison.csv"
 
 echo "Done. Open:"
-echo "  $SUMMARY_DIR/escape_w1_chain_convergence_report.md"
-echo "  $SUMMARY_DIR/escape_w1_init_comparison.md"
-echo "  $SUMMARY_DIR/escape_w1_tau_escape.csv"
+echo "  $SUMMARY_DIR/${OUT_PREFIX}_chain_convergence_report.md"
+echo "  $SUMMARY_DIR/${OUT_PREFIX}_init_comparison.md"
+echo "  $SUMMARY_DIR/${OUT_PREFIX}_tau_escape.csv"
 if [[ "$THRESHOLD_GRID" == "preset" ]]; then
-  echo "  $SUMMARY_DIR/escape_w1_tau_threshold_grid.csv"
+  echo "  $SUMMARY_DIR/${OUT_PREFIX}_tau_threshold_grid.csv"
 fi
