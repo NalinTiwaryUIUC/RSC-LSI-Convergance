@@ -197,6 +197,63 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
         self.assertEqual(parse_csv_floats("1, 1, 2"), (1.0, 2.0))
         self.assertEqual(parse_csv_floats("-0.2, -0.3"), (-0.2, -0.3))
 
+    def test_post_geom_conditional_tau(self):
+        """τ_pred|geom is first step >= τ_geom with predictive crossing; Δτ = τ_pred − τ_geom."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_post_geom_predictive import compute_chain_taus  # noqa: E402
+
+        recs = [
+            {
+                "step": 10,
+                "dist_to_ref_over_sqrt_d": 0.02,
+                "nll_probe_mean": 1.0,
+                "f_margin": 0.0,
+            },
+            {
+                "step": 100,
+                "dist_to_ref_over_sqrt_d": 0.06,
+                "nll_probe_mean": 1.2,
+                "f_margin": -0.05,
+            },
+            {
+                "step": 500,
+                "dist_to_ref_over_sqrt_d": 0.08,
+                "nll_probe_mean": 1.5,
+                "f_margin": -0.25,
+            },
+        ]
+        out = compute_chain_taus(
+            recs,
+            geom_d=(0.05,),
+            abs_nll_ge=(1.45,),
+            abs_f_margin_le=(-0.20,),
+        )
+        cid_nll = "geom_d0p05_nll_ge_1p45"
+        cid_m = "geom_d0p05_f_margin_le_m0p2"
+        self.assertEqual(out[cid_nll], (100, 500, 400))
+        self.assertEqual(out[cid_m], (100, 500, 400))
+
+    def test_post_geom_same_step_nll(self):
+        """If nll threshold holds already at τ_geom row, τ_pred = τ_geom, Δτ = 0."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_post_geom_predictive import compute_chain_taus  # noqa: E402
+
+        recs = [
+            {
+                "step": 50,
+                "dist_to_ref_over_sqrt_d": 0.06,
+                "nll_probe_mean": 1.5,
+                "f_margin": 0.0,
+            },
+        ]
+        out = compute_chain_taus(
+            recs,
+            geom_d=(0.05,),
+            abs_nll_ge=(1.45,),
+            abs_f_margin_le=(),
+        )
+        self.assertEqual(out["geom_d0p05_nll_ge_1p45"], (50, 50, 0))
+
 
 if __name__ == "__main__":
     unittest.main()

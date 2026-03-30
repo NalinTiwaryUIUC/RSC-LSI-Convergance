@@ -27,6 +27,12 @@
 # Optional absolute predictive levels (same c for all chains; pick from pooled iter range across inits):
 #   export ABS_NLL_GE='1.45,1.50,1.55'
 #   export ABS_F_MARGIN_LE='-0.2,-0.25,-0.3'
+#
+# Post-geometry predictive τ (τ_NLL|geom, τ_margin|geom) and Δτ = τ_pred − τ_geom — separate script:
+#   python scripts/analyze_post_geom_predictive.py --runs-dir experiments/runs \\
+#     --parent-glob 'w1_*_ul_initI*_chain*' --auto-group \\
+#     --geom-d 0.05,0.10 --abs-nll-ge=1.45,1.55,1.70 --abs-f-margin-le=-0.20,-0.30,-0.38 \\
+#     --out-csv experiments/summaries/postgeom_w1.csv
 
 set -euo pipefail
 
