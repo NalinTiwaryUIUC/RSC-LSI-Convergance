@@ -254,6 +254,95 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
         )
         self.assertEqual(out["geom_d0p05_nll_ge_1p45"], (50, 50, 0))
 
+    def test_post_geom_window_extract_helper(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_post_geom_predictive import _extract_window_from_start  # noqa: E402
+
+        trace = __import__("numpy").array([10.0, 20.0, 30.0, 40.0], dtype=float)
+        steps = __import__("numpy").array([0, 10, 20, 30], dtype=int)
+        out = _extract_window_from_start(trace, steps, start_step=11, window_len_saves=2)
+        self.assertIsNotNone(out)
+        t, s = out
+        self.assertEqual(t.tolist(), [30.0, 40.0])
+        self.assertEqual(s.tolist(), [20, 30])
+
+    def test_post_geom_window_summary_rows_emitted(self):
+        """CLI emits window_summary rows for post_geom and post_pred."""
+        import csv
+        import numpy as np
+
+        base = Path(tempfile.mkdtemp(prefix="postgeom_window_"))
+        runs = []
+        for cid in (0, 1):
+            rd = base / f"wX_demo_initI2_stepX_chain{cid}"
+            rd.mkdir(parents=True)
+            (rd / "iter_metrics.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "step": 0,
+                                "dist_to_ref_over_sqrt_d": 0.01,
+                                "nll_probe_mean": 1.0,
+                                "f_margin": 0.0,
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "step": 10,
+                                "dist_to_ref_over_sqrt_d": 0.06,
+                                "nll_probe_mean": 1.2,
+                                "f_margin": -0.1,
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "step": 20,
+                                "dist_to_ref_over_sqrt_d": 0.08,
+                                "nll_probe_mean": 1.5,
+                                "f_margin": -0.3,
+                            }
+                        ),
+                    ]
+                )
+                + "\n"
+            )
+            np.savez(
+                rd / "samples_metrics.npz",
+                step=np.array([0, 10, 20, 30], dtype=np.int64),
+                f_nll=np.array([1.0 + cid, 2.0 + cid, 3.0 + cid, 4.0 + cid], dtype=np.float64),
+            )
+            (rd / "run_config.yaml").write_text("h: 5e-6\nsampler: underdamped\n")
+            runs.append(str(rd))
+
+        out_csv = base / "out.csv"
+        cmd = [
+            sys.executable,
+            str(ROOT / "scripts/analyze_post_geom_predictive.py"),
+            "--auto-group",
+            "--geom-d",
+            "0.05",
+            "--abs-nll-ge=1.45",
+            "--abs-f-margin-le=-0.2",
+            "--window-geom-d",
+            "0.05",
+            "--window-nll-thr",
+            "1.45",
+            "--window-len-saves",
+            "2",
+            "--out-csv",
+            str(out_csv),
+            *runs,
+        ]
+        subprocess.run(cmd, cwd=str(ROOT), check=True)
+        with open(out_csv, newline="") as f:
+            rows = list(csv.DictReader(f))
+        window_rows = [r for r in rows if r.get("row_kind") == "window_summary"]
+        self.assertGreaterEqual(len(window_rows), 2)
+        kinds = {r["window_kind"] for r in window_rows}
+        self.assertIn("post_geom_d0p05", kinds)
+        self.assertIn("post_pred_nll1p45_given_geom_d0p05", kinds)
+
 
 if __name__ == "__main__":
     unittest.main()

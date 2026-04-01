@@ -46,6 +46,10 @@ OUT_PREFIX="${OUT_PREFIX:-escape_w1}"
 TAU_FROM="${TAU_FROM:-extremal}"
 FILL_MISSING_TAU="${FILL_MISSING_TAU:-extremal}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-none}"
+RUN_POSTGEOM_WINDOWS="${RUN_POSTGEOM_WINDOWS:-0}"
+POSTGEOM_GEOM_D="${POSTGEOM_GEOM_D:-0.05}"
+POSTGEOM_NLL_THR="${POSTGEOM_NLL_THR:-1.45}"
+POSTGEOM_WINDOW_LEN_SAVES="${POSTGEOM_WINDOW_LEN_SAVES:-0}"
 mkdir -p "$SUMMARY_DIR"
 
 PY="${PYTHON:-python3}"
@@ -98,10 +102,30 @@ echo "=== 3/3 summarize_escape_init_comparison (pooled trends + U_prior/U_data r
   --out-md "$SUMMARY_DIR/${OUT_PREFIX}_init_comparison.md" \
   --out-csv "$SUMMARY_DIR/${OUT_PREFIX}_init_comparison.csv"
 
+if [[ "$RUN_POSTGEOM_WINDOWS" == "1" ]]; then
+  echo "=== 3b/3 analyze_post_geom_predictive (event-aligned windows) ==="
+  "$PY" scripts/analyze_post_geom_predictive.py \
+    --runs-dir experiments/runs \
+    --parent-glob "$RUN_GLOB" \
+    --auto-group \
+    --geom-d 0.05,0.10 \
+    --abs-nll-ge=1.45,1.55,1.70 \
+    --abs-f-margin-le=-0.20,-0.30,-0.38 \
+    --window-geom-d "$POSTGEOM_GEOM_D" \
+    --window-nll-thr "$POSTGEOM_NLL_THR" \
+    --window-len-saves "$POSTGEOM_WINDOW_LEN_SAVES" \
+    --out-csv "$SUMMARY_DIR/${OUT_PREFIX}_postgeom.csv" \
+    --out-md "$SUMMARY_DIR/${OUT_PREFIX}_postgeom_windows.md"
+fi
+
 echo "Done. Open:"
 echo "  $SUMMARY_DIR/${OUT_PREFIX}_chain_convergence_report.md"
 echo "  $SUMMARY_DIR/${OUT_PREFIX}_init_comparison.md"
 echo "  $SUMMARY_DIR/${OUT_PREFIX}_tau_escape.csv"
 if [[ "$THRESHOLD_GRID" == "preset" ]]; then
   echo "  $SUMMARY_DIR/${OUT_PREFIX}_tau_threshold_grid.csv"
+fi
+if [[ "$RUN_POSTGEOM_WINDOWS" == "1" ]]; then
+  echo "  $SUMMARY_DIR/${OUT_PREFIX}_postgeom.csv"
+  echo "  $SUMMARY_DIR/${OUT_PREFIX}_postgeom_windows.md"
 fi
