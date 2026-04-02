@@ -37,10 +37,12 @@ sys.path.insert(0, str(ROOT))
 
 try:
     import arviz as az  # type: ignore
+    import xarray as xr  # type: ignore
 
     _HAS_ARVIZ = True
 except ImportError:
     az = None  # type: ignore
+    xr = None  # type: ignore
     _HAS_ARVIZ = False
 
 # Keys excluded when grouping (vary per chain or are runtime-only)
@@ -234,22 +236,38 @@ def drift_z_analysis_window(trace: np.ndarray) -> float:
 
 def multichain_ess_bulk_tail(traces: np.ndarray) -> tuple[float, float]:
     """ArviZ multi-chain ESS (bulk + tail). `traces` shape (n_chain, n_draw)."""
-    if not _HAS_ARVIZ or az is None:
+    if not _HAS_ARVIZ or az is None or xr is None:
         return float("nan"), float("nan")
     traces = np.asarray(traces, dtype=np.float64)
+    if traces.ndim != 2:
+        return float("nan"), float("nan")
     m, n = traces.shape
     if m < 2 or n < 4:
         return float("nan"), float("nan")
     if not np.all(np.isfinite(traces)):
         return float("nan"), float("nan")
-    idata = az.from_dict(
-        {"posterior": {"x": traces}},
-        coords={"chain": np.arange(m), "draw": np.arange(n)},
-        dims={"x": ["chain", "draw"]},
-    )
-    eb = float(az.ess(idata, var_names=["x"], method="bulk")["x"].values.item())
-    et = float(az.ess(idata, var_names=["x"], method="tail")["x"].values.item())
-    return eb, et
+    # Prefer xarray.Dataset + InferenceData (avoids az.from_dict + xarray>=2024 coord bugs).
+    try:
+        posterior = xr.Dataset(
+            {"x": (["chain", "draw"], traces)},
+            coords={
+                "chain": np.arange(m, dtype=np.int64),
+                "draw": np.arange(n, dtype=np.int64),
+            },
+        )
+        if hasattr(az, "InferenceData"):
+            idata = az.InferenceData(posterior=posterior)
+        else:
+            idata = az.from_dict(
+                {"posterior": {"x": traces}},
+                coords={"chain": np.arange(m), "draw": np.arange(n)},
+                dims={"x": ["chain", "draw"]},
+            )
+        eb = float(az.ess(idata, var_names=["x"], method="bulk")["x"].values.item())
+        et = float(az.ess(idata, var_names=["x"], method="tail")["x"].values.item())
+        return eb, et
+    except Exception:
+        return float("nan"), float("nan")
 
 
 def physical_time_span_h(h: float, step_first: int, step_last: int) -> float:
