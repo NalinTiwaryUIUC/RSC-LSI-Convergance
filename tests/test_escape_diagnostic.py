@@ -273,44 +273,34 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
 
         base = Path(tempfile.mkdtemp(prefix="postgeom_window_"))
         runs = []
+        steps_np = np.arange(0, 120, 10, dtype=np.int64)
         for cid in (0, 1):
             rd = base / f"wX_demo_initI2_stepX_chain{cid}"
             rd.mkdir(parents=True)
-            (rd / "iter_metrics.jsonl").write_text(
-                "\n".join(
-                    [
-                        json.dumps(
-                            {
-                                "step": 0,
-                                "dist_to_ref_over_sqrt_d": 0.01,
-                                "nll_probe_mean": 1.0,
-                                "f_margin": 0.0,
-                            }
-                        ),
-                        json.dumps(
-                            {
-                                "step": 10,
-                                "dist_to_ref_over_sqrt_d": 0.06,
-                                "nll_probe_mean": 1.2,
-                                "f_margin": -0.1,
-                            }
-                        ),
-                        json.dumps(
-                            {
-                                "step": 20,
-                                "dist_to_ref_over_sqrt_d": 0.08,
-                                "nll_probe_mean": 1.5,
-                                "f_margin": -0.3,
-                            }
-                        ),
-                    ]
+            iter_lines = []
+            for i, st in enumerate(steps_np):
+                dsqrt = 0.01 if st < 20 else 0.06 + 0.001 * i
+                # After τ_geom (step 20), cross nll ≥ 1.45 by step 40
+                nll = 1.0 + 0.12 * i + 0.01 * cid
+                iter_lines.append(
+                    json.dumps(
+                        {
+                            "step": int(st),
+                            "dist_to_ref_over_sqrt_d": float(dsqrt),
+                            "nll_probe_mean": float(nll),
+                            "f_margin": 0.0,
+                        }
+                    )
                 )
-                + "\n"
+            (rd / "iter_metrics.jsonl").write_text("\n".join(iter_lines) + "\n")
+            f_nll = np.array(
+                [1.0 + 0.1 * j + 0.05 * cid for j in range(len(steps_np))],
+                dtype=np.float64,
             )
             np.savez(
                 rd / "samples_metrics.npz",
-                step=np.array([0, 10, 20, 30], dtype=np.int64),
-                f_nll=np.array([1.0 + cid, 2.0 + cid, 3.0 + cid, 4.0 + cid], dtype=np.float64),
+                step=steps_np,
+                f_nll=f_nll,
             )
             (rd / "run_config.yaml").write_text("h: 5e-6\nsampler: underdamped\n")
             runs.append(str(rd))
@@ -329,7 +319,9 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
             "--window-nll-thr",
             "1.45",
             "--window-len-saves",
-            "2",
+            "0",
+            "--window-suffix-fracs",
+            "0.8,0.5",
             "--out-csv",
             str(out_csv),
             *runs,
@@ -342,6 +334,17 @@ class TestAnalyzeEscapeDiagnostic(unittest.TestCase):
         kinds = {r["window_kind"] for r in window_rows}
         self.assertIn("post_geom_d0p05", kinds)
         self.assertIn("post_pred_nll1p45_given_geom_d0p05", kinds)
+        suffix_rows = [r for r in rows if r.get("row_kind") == "window_suffix"]
+        self.assertGreater(len(suffix_rows), 0)
+        best_rows = [r for r in rows if r.get("row_kind") == "window_suffix_best"]
+        self.assertEqual(len(best_rows), 2)
+
+    def test_aligned_suffix_start_idx(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from analyze_post_geom_predictive import _aligned_suffix_start_idx  # noqa: E402
+
+        self.assertEqual(_aligned_suffix_start_idx(100, 0.8), 20)
+        self.assertEqual(_aligned_suffix_start_idx(10, 0.25), 8)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,10 @@ Then predictive events only *after* that time:
   τ_NLL|geom(c_d, c_n)   = inf{ t >= τ_geom : nll_probe_mean(t) >= c_n }
   τ_margin|geom(c_d, c_m) = inf{ t >= τ_geom : f_margin(t) <= c_m }
 
+Optional: inside each event-aligned window, scan **tail fractions** (e.g. last 80%, …, 25%)
+of the aligned saves; report R̂, drift_z, ESS, ESS/T_phys per suffix and the first suffix
+(in that order) with R̂ ≤ --window-stab-rhat and max drift_z ≤ --window-stab-drift-z.
+
 Report per group (init family):
   - fraction of chains with finite τ_pred|geom
   - mean and std of Δτ = τ_pred|geom − τ_geom
@@ -203,6 +207,63 @@ def _safe_float(x: float) -> float:
     return float(x) if (x is not None and math.isfinite(float(x))) else float("nan")
 
 
+def _aligned_suffix_start_idx(n_min: int, frac: float) -> int:
+    """Start column index so ``mat[:, start:]`` is the last ``frac`` of the aligned window."""
+    if not (0.0 < frac <= 1.0):
+        return 0
+    start = int(math.floor(n_min * (1.0 - frac)))
+    return max(0, min(start, n_min - 2))
+
+
+def compute_aligned_suffix_metrics(
+    mat: np.ndarray,
+    step_mat: np.ndarray,
+    start: int,
+    h_val: float,
+    is_underdamped: bool,
+    min_draws: int,
+) -> dict[str, Any] | None:
+    """
+    Multi-chain diagnostics on ``mat[:, start:]`` (aligned chains × draws).
+    Returns None if the suffix is too short.
+    """
+    sub = mat[:, start:]
+    sub_steps = step_mat[:, start:]
+    ncol = sub.shape[1]
+    need = max(4, min_draws)
+    if ncol < need:
+        return None
+    if not np.all(np.isfinite(sub)):
+        return None
+    rh = gelman_rubin_rhat(sub)
+    dz_list = [drift_z_analysis_window(sub[i, :]) for i in range(sub.shape[0])]
+    dz_f = [z for z in dz_list if math.isfinite(z)]
+    dz_mean = float(np.mean(dz_f)) if dz_f else float("nan")
+    dz_max = float(np.max(dz_f)) if dz_f else float("nan")
+    eb, et = multichain_ess_bulk_tail(sub)
+    step_first = float(np.mean(sub_steps[:, 0]))
+    step_last = float(np.mean(sub_steps[:, -1]))
+    t_analysis = physical_time_span_h(h_val, int(round(step_first)), int(round(step_last)))
+    grad_span = grad_evals_for_step_span(int(round(step_last - step_first)), is_underdamped)
+    ess_per_t = float(eb / t_analysis) if (math.isfinite(eb) and t_analysis > 0) else float("nan")
+    ess_per_1e6 = float((eb / grad_span) * 1e6) if (math.isfinite(eb) and grad_span > 0) else float("nan")
+    return {
+        "window_rhat": rh,
+        "drift_z_mean": dz_mean,
+        "drift_z_max": dz_max,
+        "ess_bulk": eb,
+        "ess_tail": et,
+        "t_analysis_phys": t_analysis,
+        "grad_evals_span": grad_span,
+        "ess_per_t_analysis": ess_per_t,
+        "ess_per_1e6_grad": ess_per_1e6,
+        "suffix_start_idx": start,
+        "suffix_n_draws": ncol,
+        "step_first_mean": step_first,
+        "step_last_mean": step_last,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="τ_pred|geom and Δτ after dist_to_ref_over_sqrt_d geometry escape"
@@ -257,8 +318,41 @@ def main() -> None:
         default=None,
         help="Optional markdown report for event-window metrics.",
     )
+    ap.add_argument(
+        "--window-suffix-fracs",
+        type=str,
+        default="0.8,0.6,0.5,0.4,0.3,0.25",
+        metavar="F1,F2,...",
+        help="Inside each aligned window, also report last-F tail metrics (comma-separated). "
+        "Empty disables. Order: try largest F first for stabilization pick.",
+    )
+    ap.add_argument(
+        "--disable-window-suffix-scan",
+        action="store_true",
+        help="Skip tail-fraction scan inside event windows.",
+    )
+    ap.add_argument(
+        "--window-stab-rhat",
+        type=float,
+        default=1.10,
+        metavar="RMAX",
+        help="Stabilization gate: R̂ ≤ this for --window-suffix-best row.",
+    )
+    ap.add_argument(
+        "--window-stab-drift-z",
+        type=float,
+        default=0.5,
+        metavar="ZMAX",
+        help="Stabilization gate: max per-chain drift_z ≤ this for --window-suffix-best row.",
+    )
     ap.add_argument("--out-csv", type=str, default=None)
     args = ap.parse_args()
+
+    suffix_fracs: tuple[float, ...] = ()
+    if not args.disable_window_suffix_scan:
+        sfx = [f for f in parse_csv_floats(args.window_suffix_fracs) if 0.0 < f <= 1.0]
+        sfx.sort(reverse=True)
+        suffix_fracs = tuple(sfx)
 
     geom_d = parse_csv_floats(args.geom_d)
     abs_nll_ge = parse_csv_floats(args.abs_nll_ge)
@@ -311,6 +405,13 @@ def main() -> None:
             f"- Window length (saves): `{args.window_len_saves}` "
             "(<=0 means full suffix)\n"
         )
+        if suffix_fracs:
+            md_lines.append(
+                f"- **Suffix scan** (last fraction of each aligned window): "
+                f"{', '.join(f'{100 * f:g}%' for f in suffix_fracs)}; "
+                f"stabilization pick: first suffix with R̂≤{args.window_stab_rhat:g} "
+                f"and max drift_z≤{args.window_stab_drift_z:g} (largest listed fraction tried first).\n"
+            )
 
     for gname, gpaths in groups.items():
         print(f"\n=== Group: {gname} ({len(gpaths)} runs) ===")
@@ -751,6 +852,199 @@ def main() -> None:
                     f"{t_analysis:.4g} | {grad_span:.4g} | {ess_per_t:.4g} | {ess_per_1e6:.4g} |\n"
                 )
 
+            if suffix_fracs:
+                if args.out_md:
+                    md_lines.append(
+                        f"\n#### `{wname}` — tail fractions (last *F* of **aligned** window)\n\n"
+                    )
+                    md_lines.append(
+                        "| last_frac | start_idx | n_draws | R̂ | drift_z_mean | drift_z_max | "
+                        "ESS_bulk | ESS_tail | T_phys | grad_span | ESS/T_phys | passes_gate |\n"
+                    )
+                    md_lines.append(
+                        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
+                    )
+                best_frac: float | None = None
+                best_met: dict[str, Any] | None = None
+                for frac in suffix_fracs:
+                    start_col = _aligned_suffix_start_idx(n_min, frac)
+                    met = compute_aligned_suffix_metrics(
+                        mat, step_mat, start_col, h_val, is_underdamped, min_al
+                    )
+                    if met is None:
+                        print(
+                            f"  Window {wname} last-{frac:.0%} of aligned window: "
+                            "skip (too few draws in suffix)"
+                        )
+                        continue
+                    rh_s = met["window_rhat"]
+                    dzmx = met["drift_z_max"]
+                    ok = (
+                        math.isfinite(rh_s)
+                        and rh_s <= args.window_stab_rhat
+                        and math.isfinite(dzmx)
+                        and dzmx <= args.window_stab_drift_z
+                    )
+                    if ok and best_met is None:
+                        best_frac = frac
+                        best_met = met
+                    print(
+                        f"  Window {wname} last-{frac:.0%}: R̂={rh_s:.4f} "
+                        f"drift_z(mean/max)=({met['drift_z_mean']:.4g}/{dzmx:.4g}) "
+                        f"ESS_bulk={met['ess_bulk']:.4g} n={met['suffix_n_draws']} "
+                        f"passes_gate={ok}"
+                    )
+                    rows_out.append(
+                        {
+                            "row_kind": "window_suffix",
+                            "group": gname,
+                            "chain_run": "",
+                            "criterion": "",
+                            "tau_geom": "",
+                            "tau_pred": "",
+                            "delta_tau": "",
+                            "frac_finite_pred": "",
+                            "frac_finite_geom": "",
+                            "tau_geom_mean": "",
+                            "tau_geom_std": "",
+                            "tau_pred_mean": "",
+                            "tau_pred_std": "",
+                            "delta_tau_mean": "",
+                            "delta_tau_std": "",
+                            "n_chains": "",
+                            "n_finite_pred": "",
+                            "rhat_aligned": "",
+                            "window_kind": wname,
+                            "window_len_saves": args.window_len_saves,
+                            "n_chains_used": n_used,
+                            "step_first_mean": met["step_first_mean"],
+                            "step_last_mean": met["step_last_mean"],
+                            "window_rhat": rh_s,
+                            "drift_z_mean": met["drift_z_mean"],
+                            "drift_z_max": dzmx,
+                            "ess_bulk": met["ess_bulk"],
+                            "ess_tail": met["ess_tail"],
+                            "t_analysis_phys": met["t_analysis_phys"],
+                            "grad_evals_span": met["grad_evals_span"],
+                            "ess_per_t_analysis": met["ess_per_t_analysis"],
+                            "ess_per_1e6_grad": met["ess_per_1e6_grad"],
+                            "window_suffix_frac": frac,
+                            "suffix_start_idx": met["suffix_start_idx"],
+                            "suffix_n_draws": met["suffix_n_draws"],
+                            "stab_ok": int(ok),
+                        }
+                    )
+                    if args.out_md:
+                        md_lines.append(
+                            f"| {frac:.2f} | {met['suffix_start_idx']} | {met['suffix_n_draws']} | "
+                            f"{rh_s:.4f} | {met['drift_z_mean']:.4g} | {dzmx:.4g} | "
+                            f"{met['ess_bulk']:.4g} | {met['ess_tail']:.4g} | "
+                            f"{met['t_analysis_phys']:.4g} | {met['grad_evals_span']:.4g} | "
+                            f"{met['ess_per_t_analysis']:.4g} | "
+                            f"{'yes' if ok else 'no'} |\n"
+                        )
+                if best_met is not None and best_frac is not None:
+                    print(
+                        f"  Window {wname} stabilized suffix (first passing, largest F first): "
+                        f"last-{best_frac:.0%} start_idx={best_met['suffix_start_idx']} "
+                        f"R̂={best_met['window_rhat']:.4f} drift_z_max={best_met['drift_z_max']:.4g}"
+                    )
+                    rows_out.append(
+                        {
+                            "row_kind": "window_suffix_best",
+                            "group": gname,
+                            "chain_run": "",
+                            "criterion": "",
+                            "tau_geom": "",
+                            "tau_pred": "",
+                            "delta_tau": "",
+                            "frac_finite_pred": "",
+                            "frac_finite_geom": "",
+                            "tau_geom_mean": "",
+                            "tau_geom_std": "",
+                            "tau_pred_mean": "",
+                            "tau_pred_std": "",
+                            "delta_tau_mean": "",
+                            "delta_tau_std": "",
+                            "n_chains": "",
+                            "n_finite_pred": "",
+                            "rhat_aligned": "",
+                            "window_kind": wname,
+                            "window_len_saves": args.window_len_saves,
+                            "n_chains_used": n_used,
+                            "step_first_mean": best_met["step_first_mean"],
+                            "step_last_mean": best_met["step_last_mean"],
+                            "window_rhat": best_met["window_rhat"],
+                            "drift_z_mean": best_met["drift_z_mean"],
+                            "drift_z_max": best_met["drift_z_max"],
+                            "ess_bulk": best_met["ess_bulk"],
+                            "ess_tail": best_met["ess_tail"],
+                            "t_analysis_phys": best_met["t_analysis_phys"],
+                            "grad_evals_span": best_met["grad_evals_span"],
+                            "ess_per_t_analysis": best_met["ess_per_t_analysis"],
+                            "ess_per_1e6_grad": best_met["ess_per_1e6_grad"],
+                            "window_suffix_frac": best_frac,
+                            "suffix_start_idx": best_met["suffix_start_idx"],
+                            "suffix_n_draws": best_met["suffix_n_draws"],
+                            "stab_ok": 1,
+                        }
+                    )
+                    if args.out_md:
+                        md_lines.append(
+                            f"\n*Stabilized pick:* last **{best_frac:.0%}**, "
+                            f"R̂≤{args.window_stab_rhat:g}, max drift_z≤{args.window_stab_drift_z:g}.\n"
+                        )
+                else:
+                    print(
+                        f"  Window {wname}: no suffix on grid passed "
+                        f"R̂≤{args.window_stab_rhat:g} and max drift_z≤{args.window_stab_drift_z:g}"
+                    )
+                    rows_out.append(
+                        {
+                            "row_kind": "window_suffix_best",
+                            "group": gname,
+                            "chain_run": "",
+                            "criterion": "",
+                            "tau_geom": "",
+                            "tau_pred": "",
+                            "delta_tau": "",
+                            "frac_finite_pred": "",
+                            "frac_finite_geom": "",
+                            "tau_geom_mean": "",
+                            "tau_geom_std": "",
+                            "tau_pred_mean": "",
+                            "tau_pred_std": "",
+                            "delta_tau_mean": "",
+                            "delta_tau_std": "",
+                            "n_chains": "",
+                            "n_finite_pred": "",
+                            "rhat_aligned": "",
+                            "window_kind": wname,
+                            "window_len_saves": args.window_len_saves,
+                            "n_chains_used": n_used,
+                            "step_first_mean": float("nan"),
+                            "step_last_mean": float("nan"),
+                            "window_rhat": float("nan"),
+                            "drift_z_mean": float("nan"),
+                            "drift_z_max": float("nan"),
+                            "ess_bulk": float("nan"),
+                            "ess_tail": float("nan"),
+                            "t_analysis_phys": float("nan"),
+                            "grad_evals_span": float("nan"),
+                            "ess_per_t_analysis": float("nan"),
+                            "ess_per_1e6_grad": float("nan"),
+                            "window_suffix_frac": "",
+                            "suffix_start_idx": "",
+                            "suffix_n_draws": "",
+                            "stab_ok": 0,
+                        }
+                    )
+                    if args.out_md:
+                        md_lines.append(
+                            f"\n*Stabilized pick:* **none** on this grid / gates "
+                            f"(R̂≤{args.window_stab_rhat:g}, max drift_z≤{args.window_stab_drift_z:g}).\n"
+                        )
+
     if args.out_csv:
         outp = Path(args.out_csv)
         outp.parent.mkdir(parents=True, exist_ok=True)
@@ -787,12 +1081,16 @@ def main() -> None:
             "grad_evals_span",
             "ess_per_t_analysis",
             "ess_per_1e6_grad",
+            "window_suffix_frac",
+            "suffix_start_idx",
+            "suffix_n_draws",
+            "stab_ok",
         ]
         with open(outp, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
             for row in rows_out:
-                w.writerow(row)
+                w.writerow({fn: row.get(fn, "") for fn in fields})
         print("\nWrote", outp)
     if args.out_md:
         mdp = Path(args.out_md)
