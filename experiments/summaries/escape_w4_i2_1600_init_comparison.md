@@ -1,6 +1,6 @@
 # Escape init comparison (from `iter_metrics.jsonl`)
 
-Runs dir: `/scratch/nalint2/RSC-LSI-Convergance/experiments/runs` glob: `w4_*_ul_initI2_step1600_chain*`
+Runs dir: `/scratch/nalint2/RSC-LSI-Convergance/experiments/runs` glob: `w4_*_T100000_*ul_initI2_step1600_chain*`
 Init groups: **1**
 
 Ratios **U_prior/U_data** and **U_prior/U_train** use the **last 25%** of logged rows per chain, pooled within each init group.
