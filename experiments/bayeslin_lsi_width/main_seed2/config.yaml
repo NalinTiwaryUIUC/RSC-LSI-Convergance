@@ -1,0 +1,17 @@
+model: bayesian_linear_regression
+widths:
+- 32
+- 64
+- 128
+- 256
+- 512
+n_over_m: 4
+alpha: 0.3
+sigma: 10.0
+teacher_scale: 1.0
+h_factor: 0.05
+T_phys: 10.0
+log_dt: 0.005
+seed: 2
+init: zero
+dynamics: gradient_descent
