@@ -18,7 +18,7 @@
 #
 # Mode (default: pilot):
 #   export MODE=pilot   # widths 32,64,128,256 seeds 0,1,2 T_phys=10 -> pilot_seed*
-#   export MODE=main    # widths 32..512 seeds 0..9 T_phys=20 -> main_seed*
+#   export MODE=main    # widths 32..512 seeds 0..9 sigma=10 T_phys=10 log_dt=0.005 -> main_seed*
 #   export MODE=plot_pilot
 #   export MODE=plot_main
 #
@@ -64,8 +64,8 @@ case "$MODE" in
         ;;
     main)
         python3 scripts/bayeslin_lsi_width_convergence.py \
-            --widths 32,64,128,256,512 --n-over-m 4 --alpha 0.3 --sigma 1.0 --teacher-scale 1.0 \
-            --h-factor 0.05 --T-phys 20.0 --log-dt 0.02 \
+            --widths 32,64,128,256,512 --n-over-m 4 --alpha 0.3 --sigma 10.0 --teacher-scale 1.0 \
+            --h-factor 0.05 --T-phys 10.0 --log-dt 0.005 \
             --seeds 0,1,2,3,4,5,6,7,8,9 --out-dir experiments/bayeslin_lsi_width/main
         ;;
     plot_pilot)

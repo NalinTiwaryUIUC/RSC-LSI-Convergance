@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from bayeslin_lsi_common import (  # noqa: E402
+    StdlibRNG,
     build_posterior_precision,
     build_rhs_b,
     convergence_metrics_row,
@@ -18,6 +19,7 @@ from bayeslin_lsi_common import (  # noqa: E402
     fit_rate,
     generate_linear_regression_data,
     global_step_size,
+    make_rng,
     grad_U,
     grad_U_via_star,
     iterate_gd_closed_form,
@@ -141,8 +143,21 @@ class TestPosteriorAndGradient(unittest.TestCase):
 
 
 class TestDataGeneration(unittest.TestCase):
+    def test_make_rng_draws(self):
+        r = make_rng(42)
+        x = r.normal(size=10)
+        self.assertEqual(x.shape, (10,))
+        self.assertTrue(np.isfinite(x).all())
+
+    def test_stdlib_rng_regression_data(self):
+        X, y, tt = generate_linear_regression_data(6, 4, 0.3, 1.0, 1.0, StdlibRNG(0))
+        self.assertEqual(X.shape, (24, 6))
+        self.assertEqual(y.shape, (24,))
+        self.assertEqual(tt.shape, (6,))
+        self.assertTrue(np.isfinite(X).all() and np.isfinite(y).all())
+
     def test_spectrum_keys(self):
-        rng = np.random.default_rng(0)
+        rng = make_rng(0)
         X, y, _ = generate_linear_regression_data(10, 4, 0.3, 1.0, 1.0, rng)
         H = build_posterior_precision(X, 0.3, 1.0)
         s = spectrum_summary(H)

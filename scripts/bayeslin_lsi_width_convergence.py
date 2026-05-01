@@ -14,8 +14,8 @@ Pilot / main examples::
       --seeds 0,1,2 --out-dir experiments/bayeslin_lsi_width/pilot
 
     python3 scripts/bayeslin_lsi_width_convergence.py \\
-      --widths 32,64,128,256,512 --n-over-m 4 --alpha 0.3 --sigma 1.0 \\
-      --teacher-scale 1.0 --h-factor 0.05 --T-phys 20.0 --log-dt 0.02 \\
+      --widths 32,64,128,256,512 --n-over-m 4 --alpha 0.3 --sigma 10.0 \\
+      --teacher-scale 1.0 --h-factor 0.05 --T-phys 10.0 --log-dt 0.005 \\
       --seeds 0,1,2,3,4,5,6,7,8,9 --out-dir experiments/bayeslin_lsi_width/main
 """
 from __future__ import annotations

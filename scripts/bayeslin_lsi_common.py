@@ -4,26 +4,57 @@ Pure math and helpers for Bayesian linear regression LSI width experiments.
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, Union
 
 import numpy as np
 
 
+class StdlibRNG:
+    """
+    Numpy-Generator-like RNG using only the stdlib (for broken ``numpy.random`` installs).
+    """
+
+    __slots__ = ("_r",)
+
+    def __init__(self, seed: int) -> None:
+        self._r = random.Random(seed)
+
+    def normal(
+        self, loc: float = 0.0, scale: float = 1.0, size: Optional[Union[int, tuple[int, ...]]] = None
+    ) -> Any:
+        if size is None:
+            return float(loc + scale * self._r.gauss(0.0, 1.0))
+        n = int(np.prod(size))
+        arr = np.fromiter(
+            (loc + scale * self._r.gauss(0.0, 1.0) for _ in range(n)),
+            dtype=np.float64,
+            count=n,
+        )
+        return arr.reshape(size)
+
+
 def make_rng(seed: int) -> Any:
     """
-    Return a NumPy RNG. Prefer ``numpy.random.default_rng``; fall back to ``RandomState``
-    for older NumPy. Uses submodule imports so a broken ``np.random`` attribute on the
-    top-level ``numpy`` module (some partial installs) still works.
+    Return an RNG with a ``.normal(...)`` API compatible with ``generate_linear_regression_data``.
+
+    Order: ``numpy.random.default_rng`` → ``RandomState`` → stdlib :class:`StdlibRNG`
+    (last resort when ``numpy.random`` is a broken stub, e.g. ``ImportError: unknown location``).
     """
     try:
         from numpy.random import default_rng
 
         return default_rng(seed)
-    except (ImportError, AttributeError, TypeError):
+    except (ImportError, AttributeError, TypeError, OSError):
+        pass
+    try:
         from numpy.random import RandomState
 
         return RandomState(seed)
+    except (ImportError, AttributeError, TypeError, OSError):
+        pass
+    return StdlibRNG(seed)
 
 
 def potential_U(theta: np.ndarray, X: np.ndarray, y: np.ndarray, alpha: float, sigma: float) -> float:
