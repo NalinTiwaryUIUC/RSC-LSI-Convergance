@@ -39,6 +39,7 @@ from bayeslin_lsi_common import (
     generate_linear_regression_data,
     global_step_size,
     grad_U,
+    make_rng,
     potential_U,
     spectrum_summary,
     theta_star_from_normal_eqs,
@@ -170,7 +171,7 @@ def run_one_seed(
     log_dt: float,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(seed)
+    rng = make_rng(seed)
 
     cfg = {
         "model": "bayesian_linear_regression",

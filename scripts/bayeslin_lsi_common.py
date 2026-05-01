@@ -5,8 +5,25 @@ Pure math and helpers for Bayesian linear regression LSI width experiments.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+
+
+def make_rng(seed: int) -> Any:
+    """
+    Return a NumPy RNG. Prefer ``numpy.random.default_rng``; fall back to ``RandomState``
+    for older NumPy. Uses submodule imports so a broken ``np.random`` attribute on the
+    top-level ``numpy`` module (some partial installs) still works.
+    """
+    try:
+        from numpy.random import default_rng
+
+        return default_rng(seed)
+    except (ImportError, AttributeError, TypeError):
+        from numpy.random import RandomState
+
+        return RandomState(seed)
 
 
 def potential_U(theta: np.ndarray, X: np.ndarray, y: np.ndarray, alpha: float, sigma: float) -> float:
@@ -42,7 +59,7 @@ def generate_linear_regression_data(
     alpha: float,
     sigma: float,
     teacher_scale: float,
-    rng: np.random.Generator,
+    rng: Any,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     n = c * m
     X = rng.normal(size=(n, m)).astype(np.float64)
