@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=neg_curv
-#SBATCH --time=12:00:00
+#SBATCH --time=48:00:00
 #SBATCH --mail-type=ALL,FAIL
 #SBATCH --mail-user="nalint2@illinois.edu"
 #SBATCH --nodes=1
