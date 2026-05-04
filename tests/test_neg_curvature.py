@@ -22,6 +22,11 @@ Equivalent::
 **Full module (adds ResNet runner smoke + matplotlib plot subprocess — slower):**
 
     python3 -m unittest tests.test_neg_curvature -v
+
+**After multi-seed pilot, mean ± std table:**
+
+    MODE=table_pilot sbatch scripts/run_neg_curvature.sh
+    # or: python3 scripts/aggregate_neg_curvature.py --run-glob 'experiments/neg_curv/pilot_seed*' --checkpoint final --out-csv ...
 """
 from __future__ import annotations
 
@@ -313,6 +318,7 @@ class TestRunnerSmoke(unittest.TestCase):
                     num_local_neg=0, local_lanczos_steps=10,
                     dtype="float32", device="cpu",
                     out_dir=str(out),
+                    matched_train_acc=None,
                 )
                 runner._run_one_seed(out, 0, ns)
 
@@ -328,8 +334,9 @@ class TestRunnerSmoke(unittest.TestCase):
                     "train_loss", "train_acc", "curv_loss", "curv_acc",
                     "gamma_emp", "sqrt_m_gamma_emp",
                     "T_neg_top20", "T_neg_SLQ",
-                    "r_eff_neg", "r_eff_over_p", "r_eff_over_sqrt_m",
-                    "E_iso", "E_aniso", "E_aniso_over_E_iso",
+                    "r_eff_top20", "r_eff_neg", "r_eff_over_p", "r_eff_top20_over_p",
+                    "r_eff_over_sqrt_m",
+                    "E_iso", "E_aniso", "E_aniso_over_E_iso", "E_aniso_top20_over_E_iso",
                     "k50", "k80", "k90",
                 ]:
                     self.assertIn(col, row, msg=f"missing column {col!r}")
@@ -372,17 +379,21 @@ def _write_synthetic_seed_dir(seed_dir: Path, *, widths=(1, 2, 4), seed: int = 0
                              "cum_eta": cum,
                              "cum_eta_over_Tneg": (cum / T_neg) if T_neg > 0 else float("nan")})
         p = 1000 * w
+        r_top = T_neg / gamma if gamma > 0 else 0.0
         summary_rows.append({
             "width": w, "m": m_hidden, "seed": seed, "checkpoint": "final",
             "step": 1000, "p": p,
             "train_loss": 0.5, "train_acc": 90.0, "curv_loss": 0.5, "curv_acc": 90.0,
             "gamma_emp": gamma, "sqrt_m_gamma_emp": np.sqrt(m_hidden) * gamma,
             "T_neg_top20": T_neg, "T_neg_SLQ": float("nan"), "T_neg_used": T_neg,
-            "r_eff_neg": T_neg / gamma if gamma > 0 else 0.0,
+            "r_eff_top20": r_top,
+            "r_eff_neg": r_top,
             "r_eff_over_p": (T_neg / gamma) / p if gamma > 0 else 0.0,
+            "r_eff_top20_over_p": r_top / p if gamma > 0 else 0.0,
             "r_eff_over_sqrt_m": (T_neg / gamma) / np.sqrt(m_hidden) if gamma > 0 else 0.0,
             "E_iso": gamma * p, "E_aniso": T_neg,
             "E_aniso_over_E_iso": T_neg / (gamma * p) if gamma > 0 else 0.0,
+            "E_aniso_top20_over_E_iso": T_neg / (gamma * p) if gamma > 0 else 0.0,
             "k50": 1, "k80": 2, "k90": 3,
             "local_gamma_max": float("nan"), "local_gamma_mean": float("nan"),
             "local_gamma_std": float("nan"),
@@ -448,6 +459,30 @@ class TestLinop(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 12. flat_grad and ce_mean_loss helpers.
 # ---------------------------------------------------------------------------
+
+class TestCELossScaling(unittest.TestCase):
+    """Full loss Hessian H_L scales linearly when CE is multiplied by a constant."""
+
+    def test_hvp_scales_with_ce_multiplier(self):
+        torch.manual_seed(21)
+        d, k, B = 4, 3, 8
+        model = nn.Linear(d, k, bias=True).double()
+        x = torch.randn(B, d, dtype=torch.float64)
+        y = torch.randint(0, k, (B,))
+        p_total = sum(p.numel() for p in model.parameters())
+        v = torch.randn(p_total, dtype=torch.float64)
+
+        def ce_scaled(scale: float):
+            def loss_fn(z, y_):
+                return scale * F.cross_entropy(z, y_, reduction="mean")
+
+            return loss_fn
+
+        s = 2.5
+        h1 = hvp_full(model, x, y, v, loss_fn=ce_scaled(1.0))
+        h2 = hvp_full(model, x, y, v, loss_fn=ce_scaled(s))
+        torch.testing.assert_close(h2, s * h1, rtol=1e-9, atol=1e-9)
+
 
 class TestFlatGrad(unittest.TestCase):
     def test_flat_grad_matches_autograd(self):

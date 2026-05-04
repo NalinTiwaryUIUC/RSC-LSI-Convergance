@@ -52,8 +52,8 @@ def _aggregate_by_width(rows: list[dict]) -> tuple[list[int], dict[str, dict[int
     widths = sorted({int(r["width"]) for r in rows})
     keys = [
         "m", "p", "gamma_emp", "T_neg_top20", "T_neg_SLQ", "T_neg_used",
-        "r_eff_neg", "r_eff_over_p", "r_eff_over_sqrt_m",
-        "E_iso", "E_aniso", "E_aniso_over_E_iso",
+        "r_eff_neg", "r_eff_top20", "r_eff_over_p", "r_eff_top20_over_p", "r_eff_over_sqrt_m",
+        "E_iso", "E_aniso", "E_aniso_over_E_iso", "E_aniso_top20_over_E_iso",
         "sqrt_m_gamma_emp",
     ]
     out: dict[str, dict[int, np.ndarray]] = {k: {w: [] for w in widths} for k in keys}
@@ -173,16 +173,16 @@ def main() -> None:
     plt.savefig(plot_root / "gamma_emp_vs_width.pdf")
     plt.close()
 
-    # Plot 2: r_eff / p vs width
+    # Plot 2: r_eff_top20 / p vs width (top-20 negative trace effective rank)
     plt.figure(figsize=(6, 4))
     means, ses = [], []
     for w in widths:
-        mu, se = _mean_se(agg["r_eff_over_p"][w])
+        mu, se = _mean_se(agg["r_eff_top20_over_p"][w])
         means.append(mu); ses.append(se)
     plt.errorbar(ms, means, yerr=ses, fmt="o-", capsize=3)
     plt.xlabel("width m (hidden)")
-    plt.ylabel("r_eff_neg / p")
-    plt.title(f"effective negative rank / p (checkpoint={args.checkpoint})")
+    plt.ylabel(r"$r_{\mathrm{eff,top20}}^{\mathrm{neg}}/p$")
+    plt.title(f"effective negative rank (top-20) / p (checkpoint={args.checkpoint})")
     plt.tight_layout()
     plt.savefig(plot_root / "r_eff_over_p_vs_width.pdf")
     plt.close()
@@ -198,12 +198,18 @@ def main() -> None:
         m2, s2 = _mean_se(agg["E_aniso"][w])
         iso_mu.append(m1); iso_se.append(s1)
         aniso_mu.append(m2); aniso_se.append(s2)
-    plt.errorbar(ms, iso_mu, yerr=iso_se, fmt="o-", label="E_iso = gamma_emp * p", capsize=3)
-    plt.errorbar(ms, aniso_mu, yerr=aniso_se, fmt="s-", label="E_aniso = T_neg", capsize=3)
+    plt.errorbar(ms, iso_mu, yerr=iso_se, fmt="o-", label=r"$E_{\mathrm{iso}}=\gamma_{\mathrm{emp}}\,p$", capsize=3)
+    # Paper figure: compare isotropic proxy to the top-20 negative trace (not SLQ T_used).
+    top_mu, top_se = [], []
+    for w in widths:
+        m2, s2 = _mean_se(agg["T_neg_top20"][w])
+        top_mu.append(m2)
+        top_se.append(s2)
+    plt.errorbar(ms, top_mu, yerr=top_se, fmt="s-", label=r"$T_{\mathrm{neg,top20}}$ (aniso proxy)", capsize=3)
     plt.yscale("log")
     plt.xlabel("width m (hidden)")
     plt.ylabel("exponent proxy (log scale)")
-    plt.title(f"E_iso vs E_aniso (checkpoint={args.checkpoint})")
+    plt.title(f"E_iso vs T_neg_top20 (checkpoint={args.checkpoint})")
     plt.legend()
     plt.tight_layout()
     plt.savefig(plot_root / "E_iso_vs_E_aniso_vs_width.pdf")

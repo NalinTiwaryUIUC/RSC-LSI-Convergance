@@ -28,4 +28,5 @@ exec python3 -m unittest -v \
     tests.test_neg_curvature.TestWidthMapping \
     tests.test_neg_curvature.TestLinop \
     tests.test_neg_curvature.TestFlatGrad \
+    tests.test_neg_curvature.TestCELossScaling \
     "$@"

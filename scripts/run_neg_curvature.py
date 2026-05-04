@@ -26,9 +26,9 @@ Outputs per run dir:
 
 Pilot / main examples::
 
-    # Pilot (seed 0, final only, top-20, no SLQ, no local check):
+    # Pilot (seeds 0,1,2, final only, top-20, no SLQ, no local check):
     python3 scripts/run_neg_curvature.py \\
-        --widths 1,2,4 --seeds 0 --checkpoints final \\
+        --widths 1,2,4 --seeds 0,1,2 --checkpoints final \\
         --no-slq --no-local-check \\
         --out-dir experiments/neg_curv/pilot
 
@@ -92,12 +92,15 @@ SUMMARY_FIELDNAMES = [
     "T_neg_top20",
     "T_neg_SLQ",
     "T_neg_used",
+    "r_eff_top20",
     "r_eff_neg",
     "r_eff_over_p",
+    "r_eff_top20_over_p",
     "r_eff_over_sqrt_m",
     "E_iso",
     "E_aniso",
     "E_aniso_over_E_iso",
+    "E_aniso_top20_over_E_iso",
     "k50",
     "k80",
     "k90",
@@ -195,6 +198,14 @@ def build_argparser() -> argparse.ArgumentParser:
     # numerics
     p.add_argument("--dtype", type=str, default="float32", choices=["float32", "float64"])
     p.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
+    # optional: first time train_acc >= threshold (after an SGD update), record extra checkpoint
+    p.add_argument(
+        "--matched-train-acc",
+        type=float,
+        default=None,
+        help="If set, also record curvature when train_acc first reaches this value (percent). "
+        "Checkpoint name: matched_acc<int>, e.g. matched_acc95.",
+    )
     # output
     p.add_argument("--out-dir", type=str, required=True)
     return p
@@ -456,6 +467,146 @@ def _local_stability(
     return rows, summary
 
 
+def _record_checkpoint_metrics(
+    *,
+    model: torch.nn.Module,
+    out_dir: Path,
+    w: int,
+    seed: int,
+    m_hidden: int,
+    p_int: int,
+    ckpt_name: str,
+    phys_step: int,
+    x_train: torch.Tensor,
+    y_train: torch.Tensor,
+    x_curv: torch.Tensor,
+    y_curv: torch.Tensor,
+    theta_init: torch.Tensor,
+    args: argparse.Namespace,
+    device: torch.device,
+    torch_dtype: torch.dtype,
+    np_dtype: np.dtype,
+    probe_rng: np.random.Generator,
+    local_rng: np.random.Generator,
+    summary_rows: list[dict],
+    eig_rows_by_file: dict[str, list[dict]],
+    local_rows_by_file: dict[str, list[dict]],
+) -> None:
+    """Evaluate train/curv batch metrics, run Lanczos (+ optional SLQ), append CSV rows."""
+    if args.save_ckpts:
+        ckpt_path = out_dir / f"ckpt_width{w}_seed{seed}_{ckpt_name}.pt"
+        torch.save(
+            {"state_dict": model.state_dict(), "step": phys_step,
+             "width": w, "arch": args.arch, "num_blocks": args.num_blocks},
+            ckpt_path,
+        )
+
+    train_loss, train_acc = _eval_loss_acc(model, x_train, y_train)
+    curv_loss, curv_acc = _eval_loss_acc(model, x_curv, y_curv)
+
+    cur = _curvature_pipeline(
+        model, x_curv, y_curv, p_int,
+        num_neg=args.num_neg,
+        lanczos_steps=args.lanczos_steps,
+        ncv=args.ncv,
+        lanczos_tol=args.lanczos_tol,
+        slq=args.slq,
+        num_probes=args.num_probes,
+        slq_steps=args.slq_steps,
+        device=device,
+        torch_dtype=torch_dtype,
+        np_dtype=np_dtype,
+        probe_rng=probe_rng,
+    )
+
+    T_top = float(cur["T_neg_top"])
+    T_slq = cur["T_neg_slq"]
+    T_used = float(T_slq) if (args.slq and np.isfinite(T_slq) and float(T_slq) > 0.0) else T_top
+    gamma_emp = float(cur["gamma_emp"])
+    r_top = r_eff_neg(T_top, gamma_emp)
+    r_eff = r_eff_neg(T_used, gamma_emp)
+    E_iso = e_iso(gamma_emp, p_int)
+    E_an = e_aniso(T_used)
+    E_ratio = (E_an / E_iso) if E_iso > 0.0 else float("nan")
+
+    local_summary = {"local_gamma_max": float("nan"),
+                     "local_gamma_mean": float("nan"),
+                     "local_gamma_std": float("nan")}
+    if args.local_check and ckpt_name == "final":
+        with torch.no_grad():
+            theta_final = flatten_params(model).clone()
+        local_rows, local_summary = _local_stability(
+            model,
+            theta_t=theta_final,
+            theta_init=theta_init,
+            x_curv=x_curv,
+            y_curv=y_curv,
+            p=p_int,
+            num_local=args.num_local,
+            eps_rel=args.eps_rel,
+            num_local_neg=args.num_local_neg,
+            local_lanczos_steps=args.local_lanczos_steps,
+            device=device,
+            torch_dtype=torch_dtype,
+            np_dtype=np_dtype,
+            rng=local_rng,
+        )
+        fname = f"local_stability_width{w}_seed{seed}.csv"
+        rows = local_rows_by_file.setdefault(fname, [])
+        for r in local_rows:
+            rows.append({
+                "width": w, "m": m_hidden, "seed": seed, "checkpoint": ckpt_name,
+                **r,
+            })
+
+    eigs_sorted_asc = np.sort(np.asarray(cur["eigs"], dtype=np.float64))
+    T_for_frac = T_used if T_used > 0.0 else 1.0
+    eig_fname = f"negative_eigs_width{w}_seed{seed}_{ckpt_name}.csv"
+    eig_rows = eig_rows_by_file.setdefault(eig_fname, [])
+    cum = 0.0
+    for rank_idx, lam in enumerate(eigs_sorted_asc, start=1):
+        eta_val = max(0.0, -float(lam))
+        cum += eta_val
+        eig_rows.append({
+            "rank": rank_idx,
+            "lambda": float(lam),
+            "eta": eta_val,
+            "cum_eta": cum,
+            "cum_eta_over_Tneg": (cum / T_for_frac) if T_for_frac > 0.0 else float("nan"),
+        })
+
+    summary_rows.append({
+        "width": w,
+        "m": m_hidden,
+        "seed": seed,
+        "checkpoint": ckpt_name,
+        "step": phys_step,
+        "p": p_int,
+        "train_loss": train_loss,
+        "train_acc": train_acc,
+        "curv_loss": curv_loss,
+        "curv_acc": curv_acc,
+        "gamma_emp": gamma_emp,
+        "sqrt_m_gamma_emp": float(np.sqrt(m_hidden) * gamma_emp),
+        "T_neg_top20": T_top,
+        "T_neg_SLQ": T_slq,
+        "T_neg_used": T_used,
+        "r_eff_top20": r_top,
+        "r_eff_neg": r_eff,
+        "r_eff_over_p": (r_eff / p_int) if p_int > 0 else float("nan"),
+        "r_eff_top20_over_p": (r_top / p_int) if p_int > 0 else float("nan"),
+        "r_eff_over_sqrt_m": r_eff / float(np.sqrt(m_hidden)),
+        "E_iso": E_iso,
+        "E_aniso": E_an,
+        "E_aniso_over_E_iso": E_ratio,
+        "E_aniso_top20_over_E_iso": (T_top / E_iso) if E_iso > 0.0 else float("nan"),
+        "k50": cur["k50"],
+        "k80": cur["k80"],
+        "k90": cur["k90"],
+        **local_summary,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Main per-seed loop
 # ---------------------------------------------------------------------------
@@ -496,6 +647,7 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
         "device": str(device),
         "init": "factory_default",
         "loss": "cross_entropy_mean",
+        "matched_train_acc": getattr(args, "matched_train_acc", None),
     }
     with (out_dir / "config.yaml").open("w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
@@ -541,122 +693,38 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
             nesterov=False,
         )
 
+        matched_fired = False
+        num_updates = 0
         for step in range(0, args.max_steps + 1):
             if step in ckpt_steps:
                 ckpt_name = ckpt_name_by_step[step]
-                if args.save_ckpts:
-                    ckpt_path = out_dir / f"ckpt_width{w}_seed{seed}_{ckpt_name}.pt"
-                    torch.save(
-                        {"state_dict": model.state_dict(), "step": step,
-                         "width": w, "arch": args.arch, "num_blocks": args.num_blocks},
-                        ckpt_path,
-                    )
-
-                train_loss, train_acc = _eval_loss_acc(model, x_train, y_train)
-                curv_loss, curv_acc = _eval_loss_acc(model, x_curv, y_curv)
-
                 probe_seed = (int(seed) * 1_000_003 + ckpt_steps.index(step) * 17 + int(w) * 7) % (2**31)
                 probe_rng = np.random.default_rng(probe_seed)
                 local_rng = np.random.default_rng(probe_seed + 1)
-
-                cur = _curvature_pipeline(
-                    model, x_curv, y_curv, p,
-                    num_neg=args.num_neg,
-                    lanczos_steps=args.lanczos_steps,
-                    ncv=args.ncv,
-                    lanczos_tol=args.lanczos_tol,
-                    slq=args.slq,
-                    num_probes=args.num_probes,
-                    slq_steps=args.slq_steps,
+                _record_checkpoint_metrics(
+                    model=model,
+                    out_dir=out_dir,
+                    w=w,
+                    seed=seed,
+                    m_hidden=m_hidden,
+                    p_int=int(p),
+                    ckpt_name=ckpt_name,
+                    phys_step=step,
+                    x_train=x_train,
+                    y_train=y_train,
+                    x_curv=x_curv,
+                    y_curv=y_curv,
+                    theta_init=theta_init,
+                    args=args,
                     device=device,
                     torch_dtype=torch_dtype,
                     np_dtype=np_dtype,
                     probe_rng=probe_rng,
+                    local_rng=local_rng,
+                    summary_rows=summary_rows,
+                    eig_rows_by_file=eig_rows_by_file,
+                    local_rows_by_file=local_rows_by_file,
                 )
-
-                T_used = cur["T_neg_slq"] if (args.slq and np.isfinite(cur["T_neg_slq"]) and cur["T_neg_slq"] > 0.0) else cur["T_neg_top"]
-                gamma_emp = cur["gamma_emp"]
-                p_int = int(p)
-                r_eff = r_eff_neg(T_used, gamma_emp)
-                E_iso = e_iso(gamma_emp, p_int)
-                E_an = e_aniso(T_used)
-                E_ratio = (E_an / E_iso) if E_iso > 0.0 else float("nan")
-
-                local_summary = {"local_gamma_max": float("nan"),
-                                 "local_gamma_mean": float("nan"),
-                                 "local_gamma_std": float("nan")}
-                if args.local_check and ckpt_name == "final":
-                    with torch.no_grad():
-                        theta_final = flatten_params(model).clone()
-                    local_rows, local_summary = _local_stability(
-                        model,
-                        theta_t=theta_final,
-                        theta_init=theta_init,
-                        x_curv=x_curv,
-                        y_curv=y_curv,
-                        p=p_int,
-                        num_local=args.num_local,
-                        eps_rel=args.eps_rel,
-                        num_local_neg=args.num_local_neg,
-                        local_lanczos_steps=args.local_lanczos_steps,
-                        device=device,
-                        torch_dtype=torch_dtype,
-                        np_dtype=np_dtype,
-                        rng=local_rng,
-                    )
-                    fname = f"local_stability_width{w}_seed{seed}.csv"
-                    rows = local_rows_by_file.setdefault(fname, [])
-                    for r in local_rows:
-                        rows.append({
-                            "width": w, "m": m_hidden, "seed": seed, "checkpoint": ckpt_name,
-                            **r,
-                        })
-
-                eta_sorted = cur["eta_sorted"]
-                eigs_sorted_asc = np.sort(np.asarray(cur["eigs"], dtype=np.float64))
-                T_for_frac = T_used if T_used > 0.0 else 1.0
-                eig_fname = f"negative_eigs_width{w}_seed{seed}_{ckpt_name}.csv"
-                eig_rows = eig_rows_by_file.setdefault(eig_fname, [])
-                cum = 0.0
-                for rank_idx, lam in enumerate(eigs_sorted_asc, start=1):
-                    eta_val = max(0.0, -float(lam))
-                    cum += eta_val
-                    eig_rows.append({
-                        "rank": rank_idx,
-                        "lambda": float(lam),
-                        "eta": eta_val,
-                        "cum_eta": cum,
-                        "cum_eta_over_Tneg": (cum / T_for_frac) if T_for_frac > 0.0 else float("nan"),
-                    })
-
-                summary_rows.append({
-                    "width": w,
-                    "m": m_hidden,
-                    "seed": seed,
-                    "checkpoint": ckpt_name,
-                    "step": step,
-                    "p": p_int,
-                    "train_loss": train_loss,
-                    "train_acc": train_acc,
-                    "curv_loss": curv_loss,
-                    "curv_acc": curv_acc,
-                    "gamma_emp": gamma_emp,
-                    "sqrt_m_gamma_emp": float(np.sqrt(m_hidden) * gamma_emp),
-                    "T_neg_top20": cur["T_neg_top"],
-                    "T_neg_SLQ": cur["T_neg_slq"],
-                    "T_neg_used": T_used,
-                    "r_eff_neg": r_eff,
-                    "r_eff_over_p": (r_eff / p_int) if p_int > 0 else float("nan"),
-                    "r_eff_over_sqrt_m": r_eff / float(np.sqrt(m_hidden)),
-                    "E_iso": E_iso,
-                    "E_aniso": E_an,
-                    "E_aniso_over_E_iso": E_ratio,
-                    "k50": cur["k50"],
-                    "k80": cur["k80"],
-                    "k90": cur["k90"],
-                    **local_summary,
-                })
-
                 model.train()
 
             if step == args.max_steps:
@@ -667,6 +735,40 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
             loss = F.cross_entropy(logits, y_train, reduction="mean")
             loss.backward()
             optimizer.step()
+            num_updates += 1
+
+            if args.matched_train_acc is not None and not matched_fired:
+                _tr_loss, tr_acc = _eval_loss_acc(model, x_train, y_train)
+                if tr_acc >= float(args.matched_train_acc):
+                    mname = f"matched_acc{int(round(float(args.matched_train_acc)))}"
+                    ps = (int(seed) * 991 + int(w) * 17 + num_updates * 1_009 + 99_999) % (2**31)
+                    loc = (ps + 1) % (2**31)
+                    _record_checkpoint_metrics(
+                        model=model,
+                        out_dir=out_dir,
+                        w=w,
+                        seed=seed,
+                        m_hidden=m_hidden,
+                        p_int=int(p),
+                        ckpt_name=mname,
+                        phys_step=num_updates,
+                        x_train=x_train,
+                        y_train=y_train,
+                        x_curv=x_curv,
+                        y_curv=y_curv,
+                        theta_init=theta_init,
+                        args=args,
+                        device=device,
+                        torch_dtype=torch_dtype,
+                        np_dtype=np_dtype,
+                        probe_rng=np.random.default_rng(ps),
+                        local_rng=np.random.default_rng(loc),
+                        summary_rows=summary_rows,
+                        eig_rows_by_file=eig_rows_by_file,
+                        local_rows_by_file=local_rows_by_file,
+                    )
+                    model.train()
+                    matched_fired = True
 
     with (out_dir / "curvature_summary.csv").open("w", newline="") as f:
         wr = csv.DictWriter(f, fieldnames=SUMMARY_FIELDNAMES)
