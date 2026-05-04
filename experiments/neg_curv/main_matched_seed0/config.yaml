@@ -1,0 +1,47 @@
+experiment: negative_curvature
+arch: small_resnet_ln
+num_blocks: 1
+widths:
+- 1
+- 2
+- 4
+seed: 0
+n_train: 512
+n_curv: 128
+dataset_seed: 42
+lr: 0.02
+momentum: 0.9
+weight_decay: 0.0
+max_steps: 2000
+mid_step: 500
+checkpoints:
+- init
+- mid
+- final
+curvature_mode: matched_final
+snapshot_steps:
+- 250
+- 500
+- 750
+- 1000
+- 1500
+- 2000
+match_backup: closest_acc
+match_target_loss: null
+matched_label_effective: matched
+num_neg: 20
+lanczos_steps: 80
+ncv: -1
+slq: true
+num_probes: 16
+slq_steps: 30
+local_check: false
+num_local: 5
+eps_rel: 0.01
+num_local_neg: 10
+local_lanczos_steps: 60
+dtype: float32
+device: cuda
+init: factory_default
+loss: cross_entropy_mean
+matched_train_acc: 90.0
