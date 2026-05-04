@@ -71,6 +71,43 @@ def _metric_value(r: dict, c: str) -> float:
         eiso = _f(r.get("E_iso", ""))
         if math.isfinite(t20) and math.isfinite(eiso) and eiso > 0.0:
             return t20 / eiso
+    if c == "r_eff_neg":
+        t_used = _f(r.get("T_neg_used", ""))
+        if not math.isfinite(t_used):
+            tslq = _f(r.get("T_neg_SLQ", ""))
+            t_used = tslq if math.isfinite(tslq) else t20
+        if math.isfinite(g) and g > 0.0 and math.isfinite(t_used):
+            return t_used / g
+    if c == "r_eff_over_p" and raw in (None, "", "nan"):
+        t_used = _f(r.get("T_neg_used", ""))
+        if not math.isfinite(t_used):
+            tslq = _f(r.get("T_neg_SLQ", ""))
+            t_used = tslq if math.isfinite(tslq) else t20
+        if math.isfinite(g) and g > 0.0 and math.isfinite(t_used) and math.isfinite(p) and p > 0:
+            return (t_used / g) / p
+    if c == "r_eff_over_sqrt_m":
+        m = _f(r.get("m", ""))
+        t_used = _f(r.get("T_neg_used", ""))
+        if not math.isfinite(t_used):
+            tslq = _f(r.get("T_neg_SLQ", ""))
+            t_used = tslq if math.isfinite(tslq) else t20
+        if math.isfinite(g) and g > 0.0 and math.isfinite(t_used) and math.isfinite(m) and m > 0.0:
+            return (t_used / g) / math.sqrt(m)
+    if c == "E_iso" and not math.isfinite(_f(str(raw))):
+        if math.isfinite(g) and math.isfinite(p) and p > 0.0:
+            return g * p
+    if c == "E_aniso" and not math.isfinite(_f(str(raw))):
+        t_used = _f(r.get("T_neg_used", ""))
+        if not math.isfinite(t_used):
+            tslq = _f(r.get("T_neg_SLQ", ""))
+            t_used = tslq if math.isfinite(tslq) else t20
+        if math.isfinite(t_used):
+            return t_used
+    if c == "E_aniso_over_E_iso" and not math.isfinite(_f(str(raw))):
+        eiso = _metric_value(r, "E_iso")
+        ean = _metric_value(r, "E_aniso")
+        if math.isfinite(eiso) and eiso > 0.0 and math.isfinite(ean):
+            return ean / eiso
     return float("nan")
 
 
@@ -86,12 +123,22 @@ def main() -> None:
     widths = sorted({int(r["width"]) for r in rows})
 
     cols = [
+        "p",
+        "train_loss",
+        "train_acc",
+        "curv_loss",
+        "curv_acc",
         "gamma_emp",
         "sqrt_m_gamma_emp",
         "T_neg_top20",
         "T_neg_SLQ",
+        "r_eff_neg",
         "r_eff_top20",
+        "r_eff_over_p",
+        "r_eff_over_sqrt_m",
         "r_eff_top20_over_p",
+        "E_iso",
+        "E_aniso",
         "E_aniso_top20_over_E_iso",
         "E_aniso_over_E_iso",
     ]

@@ -37,6 +37,16 @@ Pilot / main examples::
         --widths 1,2,4 --seeds 0,1,2 --checkpoints init,mid,final \\
         --slq --local-check \\
         --out-dir experiments/neg_curv/main
+
+    # Main matched (train 2000 steps, grid snapshots, curvature only at matched + final):
+    python3 scripts/run_neg_curvature.py \\
+        --widths 1,2,4 --seeds 0,1,2 --max-steps 2000 \\
+        --curvature-mode matched_final \\
+        --snapshot-steps 250,500,750,1000,1500,2000 \\
+        --matched-train-acc 90 --matched-label matched --match-backup closest_acc \\
+        --save-ckpts --slq --num-probes 16 --slq-steps 30 \\
+        --no-local-check \\
+        --out-dir experiments/neg_curv/main_matched
 """
 from __future__ import annotations
 
@@ -175,7 +185,44 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--mid-step", type=int, default=500)
     # checkpoints
     p.add_argument("--checkpoints", type=str, default="init,mid,final",
-                   help="Comma list from {init,mid,final}.")
+                   help="Comma list from {init,mid,final} or integer steps (e.g. 250,500).")
+    p.add_argument(
+        "--curvature-mode",
+        type=str,
+        default="legacy",
+        choices=["legacy", "matched_final"],
+        help="legacy: curvature at --checkpoints. matched_final: train up to --max-steps, "
+        "save grid snapshots, curvature only at primary matched row + final (see --matched-train-acc).",
+    )
+    p.add_argument(
+        "--snapshot-steps",
+        type=str,
+        default="",
+        help="Comma-separated SGD steps at which to log train loss/acc and (with --save-ckpts) save "
+        "ckpt_width{w}_seed{s}_step{S}.pt for backup matching. Steps refer to the same counting as "
+        "named checkpoints (final is at --max-steps).",
+    )
+    p.add_argument(
+        "--match-backup",
+        type=str,
+        default="closest_acc",
+        choices=["none", "closest_acc", "closest_loss", "use_final"],
+        help="If train accuracy never reaches --matched-train-acc, pick a primary 'matched' row via "
+        "this rule using grid snapshots (except use_final / none).",
+    )
+    p.add_argument(
+        "--match-target-loss",
+        type=float,
+        default=float("nan"),
+        help="Target mean CE for --match-backup closest_loss (required when that mode is selected).",
+    )
+    p.add_argument(
+        "--matched-label",
+        type=str,
+        default="",
+        help="curvature_summary 'checkpoint' string for the primary matched row. "
+        "Default: matched_acc<int> from --matched-train-acc.",
+    )
     p.add_argument("--save-ckpts", action="store_true",
                    help="Also save state_dicts to disk under the run dir.")
     # Lanczos
@@ -254,10 +301,117 @@ def _parse_ckpts(spec: str, *, mid_step: int, max_steps: int) -> list[tuple[str,
             out.append((name, mid_step))
         elif name == "final":
             out.append((name, max_steps))
+        elif name.isdigit():
+            step = int(name)
+            if step < 0 or step > max_steps:
+                raise ValueError(f"Numeric checkpoint step {step} out of range [0, {max_steps}]")
+            out.append((f"s{step}", step))
         else:
             raise ValueError(f"Unknown checkpoint name: {name}")
     out.sort(key=lambda kv: kv[1])
     return out
+
+
+def _parse_snapshot_steps(spec: str) -> list[int]:
+    if not spec.strip():
+        return []
+    out = sorted(set(_parse_int_csv(spec)))
+    if any(s < 1 for s in out):
+        raise ValueError("snapshot steps must be >= 1 (step 0 is init; use explicit 0 if needed)")
+    return out
+
+
+def _effective_matched_label(matched_train_acc: float | None, matched_label: str) -> str:
+    lab = matched_label.strip()
+    if lab:
+        return lab
+    if matched_train_acc is None:
+        return "matched"
+    return f"matched_acc{int(round(float(matched_train_acc)))}"
+
+
+def _pick_backup_match_step(
+    probes: list[tuple[int, float, float]],
+    *,
+    backup: str,
+    acc_target: float,
+    target_loss: float,
+    max_steps: int,
+) -> tuple[int | None, str]:
+    """Return (physical_step, reason) for a backup primary checkpoint when threshold was never hit.
+
+    ``probes`` are (step, train_loss, train_acc) sorted by increasing step (grid snapshots).
+    """
+    if backup == "none":
+        return None, "none"
+    if backup == "use_final":
+        return max_steps, "use_final"
+
+    if not probes:
+        return max_steps, "no_grid_probes_fallback_final"
+
+    if backup == "closest_acc":
+        best_step, best_d = probes[0][0], abs(probes[0][2] - acc_target)
+        for st, _loss, acc in probes:
+            d = abs(acc - acc_target)
+            if d < best_d or (d == best_d and st < best_step):
+                best_d, best_step = d, st
+        return best_step, "closest_acc"
+
+    if backup == "closest_loss":
+        if not np.isfinite(target_loss):
+            return max_steps, "closest_loss_missing_target_fallback_final"
+        best_step, best_d = probes[0][0], abs(probes[0][1] - target_loss)
+        for st, loss, _acc in probes:
+            d = abs(loss - target_loss)
+            if d < best_d or (d == best_d and st < best_step):
+                best_d, best_step = d, st
+        return best_step, "closest_loss"
+
+    raise ValueError(f"Unknown match-backup mode: {backup!r}")
+
+
+def _append_grid_probe_row(
+    out_dir: Path, width: int, seed: int, step: int, train_loss: float, train_acc: float,
+) -> None:
+    path = out_dir / "train_grid_probe.csv"
+    new_file = not path.exists()
+    with path.open("a", newline="") as f:
+        wr = csv.DictWriter(
+            f,
+            fieldnames=["width", "seed", "step", "train_loss", "train_acc"],
+        )
+        if new_file:
+            wr.writeheader()
+        wr.writerow({
+            "width": width,
+            "seed": seed,
+            "step": step,
+            "train_loss": train_loss,
+            "train_acc": train_acc,
+        })
+
+
+def _save_width_ckpt(
+    out_dir: Path, width: int, seed: int, step: int, model: torch.nn.Module, args: argparse.Namespace,
+) -> Path:
+    path = out_dir / f"ckpt_width{width}_seed{seed}_step{step}.pt"
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "step": step,
+            "width": width,
+            "arch": args.arch,
+            "num_blocks": args.num_blocks,
+        },
+        path,
+    )
+    return path
+
+
+def _load_width_ckpt(path: Path, model: torch.nn.Module) -> None:
+    blob = torch.load(path, map_location=next(model.parameters()).device)
+    model.load_state_dict(blob["state_dict"])
 
 
 # ---------------------------------------------------------------------------
@@ -617,6 +771,23 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
     torch_dtype = _torch_dtype(args.dtype)
     np_dtype = _np_dtype(args.dtype)
 
+    snap_list = _parse_snapshot_steps(args.snapshot_steps)
+    for s in snap_list:
+        if s > args.max_steps:
+            raise ValueError(f"snapshot step {s} exceeds --max-steps {args.max_steps}")
+    snap_steps_set = set(snap_list)
+    if args.curvature_mode == "matched_final":
+        if args.matched_train_acc is None:
+            raise ValueError("curvature_mode=matched_final requires --matched-train-acc (e.g. 90)")
+        if args.match_backup == "closest_loss" and not np.isfinite(args.match_target_loss):
+            raise ValueError("curvature_mode=matched_final with match-backup closest_loss requires "
+                             "finite --match-target-loss")
+        if snap_steps_set and args.match_backup in ("closest_acc", "closest_loss") and not args.save_ckpts:
+            args.save_ckpts = True
+            print("matched_final: enabling --save-ckpts (grid reload for backup matching)", flush=True)
+
+    matched_lab = _effective_matched_label(args.matched_train_acc, args.matched_label)
+
     cfg = {
         "experiment": "negative_curvature",
         "arch": args.arch,
@@ -632,6 +803,12 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
         "max_steps": args.max_steps,
         "mid_step": args.mid_step,
         "checkpoints": _parse_str_csv(args.checkpoints),
+        "curvature_mode": args.curvature_mode,
+        "snapshot_steps": snap_list,
+        "match_backup": args.match_backup,
+        "match_target_loss": float(args.match_target_loss)
+        if np.isfinite(args.match_target_loss) else None,
+        "matched_label_effective": matched_lab,
         "num_neg": args.num_neg,
         "lanczos_steps": args.lanczos_steps,
         "ncv": args.ncv,
@@ -652,9 +829,14 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
     with (out_dir / "config.yaml").open("w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
 
-    ckpts = _parse_ckpts(args.checkpoints, mid_step=args.mid_step, max_steps=args.max_steps)
-    ckpt_steps = [s for _, s in ckpts]
-    ckpt_name_by_step = {s: name for name, s in ckpts}
+    if args.curvature_mode == "matched_final":
+        ckpts: list[tuple[str, int]] = [("matched", -1), ("final", args.max_steps)]
+        ckpt_steps: list[int] = []
+        ckpt_name_by_step: dict[int, str] = {}
+    else:
+        ckpts = _parse_ckpts(args.checkpoints, mid_step=args.mid_step, max_steps=args.max_steps)
+        ckpt_steps = [s for _, s in ckpts]
+        ckpt_name_by_step = {s: name for name, s in ckpts}
 
     x_train, y_train, x_curv, y_curv = _load_fixed_subset(
         n_train=args.n_train,
@@ -692,6 +874,145 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
             weight_decay=args.weight_decay,
             nesterov=False,
         )
+
+        if args.curvature_mode == "matched_final":
+            grid_probes: list[tuple[int, float, float]] = []
+            matched_fired = False
+            num_updates = 0
+            for step in range(0, args.max_steps + 1):
+                if step in snap_steps_set and step > 0:
+                    if args.save_ckpts:
+                        _save_width_ckpt(out_dir, w, seed, step, model, args)
+                    tl, ta = _eval_loss_acc(model, x_train, y_train)
+                    _append_grid_probe_row(out_dir, w, seed, step, tl, ta)
+                    grid_probes.append((step, tl, ta))
+
+                if step == args.max_steps:
+                    ps0 = (int(seed) * 1_000_003 + 424242 + int(w) * 7) % (2**31)
+                    probe_rng = np.random.default_rng(ps0)
+                    local_rng = np.random.default_rng(ps0 + 1)
+                    _record_checkpoint_metrics(
+                        model=model,
+                        out_dir=out_dir,
+                        w=w,
+                        seed=seed,
+                        m_hidden=m_hidden,
+                        p_int=int(p),
+                        ckpt_name="final",
+                        phys_step=step,
+                        x_train=x_train,
+                        y_train=y_train,
+                        x_curv=x_curv,
+                        y_curv=y_curv,
+                        theta_init=theta_init,
+                        args=args,
+                        device=device,
+                        torch_dtype=torch_dtype,
+                        np_dtype=np_dtype,
+                        probe_rng=probe_rng,
+                        local_rng=local_rng,
+                        summary_rows=summary_rows,
+                        eig_rows_by_file=eig_rows_by_file,
+                        local_rows_by_file=local_rows_by_file,
+                    )
+                    model.train()
+                    break
+
+                optimizer.zero_grad(set_to_none=True)
+                model.train()
+                logits = model(x_train)
+                loss = F.cross_entropy(logits, y_train, reduction="mean")
+                loss.backward()
+                optimizer.step()
+                num_updates += 1
+
+                if args.matched_train_acc is not None and not matched_fired:
+                    _tr_loss, tr_acc = _eval_loss_acc(model, x_train, y_train)
+                    if tr_acc >= float(args.matched_train_acc):
+                        ps = (int(seed) * 991 + int(w) * 17 + num_updates * 1_009 + 99_999) % (2**31)
+                        loc = (ps + 1) % (2**31)
+                        _record_checkpoint_metrics(
+                            model=model,
+                            out_dir=out_dir,
+                            w=w,
+                            seed=seed,
+                            m_hidden=m_hidden,
+                            p_int=int(p),
+                            ckpt_name=matched_lab,
+                            phys_step=num_updates,
+                            x_train=x_train,
+                            y_train=y_train,
+                            x_curv=x_curv,
+                            y_curv=y_curv,
+                            theta_init=theta_init,
+                            args=args,
+                            device=device,
+                            torch_dtype=torch_dtype,
+                            np_dtype=np_dtype,
+                            probe_rng=np.random.default_rng(ps),
+                            local_rng=np.random.default_rng(loc),
+                            summary_rows=summary_rows,
+                            eig_rows_by_file=eig_rows_by_file,
+                            local_rows_by_file=local_rows_by_file,
+                        )
+                        model.train()
+                        matched_fired = True
+
+            if not matched_fired:
+                if args.match_backup == "none":
+                    raise RuntimeError(
+                        f"width={w} seed={seed}: never reached train_acc>={args.matched_train_acc} "
+                        "and --match-backup none",
+                    )
+                st_sel, reason = _pick_backup_match_step(
+                    grid_probes,
+                    backup=args.match_backup,
+                    acc_target=float(args.matched_train_acc),
+                    target_loss=float(args.match_target_loss),
+                    max_steps=args.max_steps,
+                )
+                ps = (int(seed) * 991 + int(w) * 17 + 777_777) % (2**31)
+                loc = (ps + 1) % (2**31)
+                ckpt_path = out_dir / f"ckpt_width{w}_seed{seed}_step{st_sel}.pt"
+                need_load = (
+                    st_sel < args.max_steps
+                    and args.match_backup in ("closest_acc", "closest_loss")
+                    and ckpt_path.exists()
+                )
+                if need_load:
+                    _load_width_ckpt(ckpt_path, model)
+                elif st_sel < args.max_steps:
+                    print(
+                        f"warning: width={w} seed={seed}: backup step {st_sel} ckpt missing "
+                        f"({reason}); recording '{matched_lab}' at final weights.",
+                        flush=True,
+                    )
+                _record_checkpoint_metrics(
+                    model=model,
+                    out_dir=out_dir,
+                    w=w,
+                    seed=seed,
+                    m_hidden=m_hidden,
+                    p_int=int(p),
+                    ckpt_name=matched_lab,
+                    phys_step=int(st_sel),
+                    x_train=x_train,
+                    y_train=y_train,
+                    x_curv=x_curv,
+                    y_curv=y_curv,
+                    theta_init=theta_init,
+                    args=args,
+                    device=device,
+                    torch_dtype=torch_dtype,
+                    np_dtype=np_dtype,
+                    probe_rng=np.random.default_rng(ps),
+                    local_rng=np.random.default_rng(loc),
+                    summary_rows=summary_rows,
+                    eig_rows_by_file=eig_rows_by_file,
+                    local_rows_by_file=local_rows_by_file,
+                )
+                model.train()
+            continue
 
         matched_fired = False
         num_updates = 0
@@ -740,7 +1061,7 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
             if args.matched_train_acc is not None and not matched_fired:
                 _tr_loss, tr_acc = _eval_loss_acc(model, x_train, y_train)
                 if tr_acc >= float(args.matched_train_acc):
-                    mname = f"matched_acc{int(round(float(args.matched_train_acc)))}"
+                    mname = matched_lab
                     ps = (int(seed) * 991 + int(w) * 17 + num_updates * 1_009 + 99_999) % (2**31)
                     loc = (ps + 1) % (2**31)
                     _record_checkpoint_metrics(
@@ -787,12 +1108,17 @@ def _run_one_seed(out_dir: Path, seed: int, args: argparse.Namespace) -> None:
             wr.writeheader()
             wr.writerows(rows)
 
+    ckpt_names_out = (
+        ["matched", "final"] if args.curvature_mode == "matched_final"
+        else [name for name, _ in ckpts]
+    )
     print(json.dumps({
         "out_dir": str(out_dir),
         "seed": seed,
         "rows": len(summary_rows),
         "widths": _parse_int_csv(args.widths),
-        "checkpoints": [name for name, _ in ckpts],
+        "checkpoints": ckpt_names_out,
+        "curvature_mode": args.curvature_mode,
     }, indent=2))
 
 

@@ -309,6 +309,11 @@ class TestRunnerSmoke(unittest.TestCase):
                     lr=0.05, momentum=0.9, weight_decay=0.0,
                     max_steps=2, mid_step=1,
                     checkpoints="final",
+                    curvature_mode="legacy",
+                    snapshot_steps="",
+                    match_backup="closest_acc",
+                    match_target_loss=float("nan"),
+                    matched_label="",
                     save_ckpts=False,
                     # eigsh needs enough iterations for ARPACK on ~100k-dim N;
                     # 80 matches production default so the first attempt converges.
@@ -436,6 +441,35 @@ class TestPlotSmoke(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 11. LinearOperator bridge sanity (numpy <-> torch).
 # ---------------------------------------------------------------------------
+
+class TestBackupMatchSteps(unittest.TestCase):
+    def test_closest_acc_tie_prefers_earlier(self):
+        import run_neg_curvature as runner
+
+        probes = [(250, 1.0, 85.0), (500, 1.0, 95.0), (750, 1.0, 85.0)]
+        st, reason = runner._pick_backup_match_step(
+            probes,
+            backup="closest_acc",
+            acc_target=90.0,
+            target_loss=float("nan"),
+            max_steps=2000,
+        )
+        self.assertEqual(st, 250)
+        self.assertEqual(reason, "closest_acc")
+
+    def test_closest_loss(self):
+        import run_neg_curvature as runner
+
+        probes = [(100, 0.5, 50.0), (200, 0.35, 60.0)]
+        st, _ = runner._pick_backup_match_step(
+            probes,
+            backup="closest_loss",
+            acc_target=90.0,
+            target_loss=0.4,
+            max_steps=2000,
+        )
+        self.assertEqual(st, 200)
+
 
 class TestLinop(unittest.TestCase):
     def test_make_torch_linop_roundtrip(self):
