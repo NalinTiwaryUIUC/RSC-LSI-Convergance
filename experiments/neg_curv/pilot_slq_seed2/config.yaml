@@ -5,7 +5,7 @@ widths:
 - 1
 - 2
 - 4
-seed: 0
+seed: 2
 n_train: 512
 n_curv: 128
 dataset_seed: 42
@@ -19,9 +19,9 @@ checkpoints:
 num_neg: 20
 lanczos_steps: 80
 ncv: -1
-slq: false
+slq: true
 num_probes: 8
-slq_steps: 30
+slq_steps: 35
 local_check: false
 num_local: 5
 eps_rel: 0.01

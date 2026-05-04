@@ -5,7 +5,7 @@ widths:
 - 1
 - 2
 - 4
-seed: 0
+seed: 1
 n_train: 512
 n_curv: 128
 dataset_seed: 42
